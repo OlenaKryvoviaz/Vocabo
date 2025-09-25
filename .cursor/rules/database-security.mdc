@@ -1,0 +1,297 @@
+---
+globs: **/db/**/*.ts,**/lib/db.ts,**/*db*.ts
+description: Database security patterns and user data isolation rules
+---
+# Database Security & User Data Isolation
+
+All database operations **MUST** respect user data boundaries. This project uses Drizzle ORM with [src/db/schema.ts](mdc:src/db/schema.ts) for type-safe database interactions.
+
+## 🔐 Core Security Principle
+
+**NEVER query user-specific tables without proper user ID filtering.**
+
+## 📊 Schema Understanding
+
+From [src/db/schema.ts](mdc:src/db/schema.ts):
+- `decksTable` has `userId` field - **ALWAYS filter by this**
+- `cardsTable` links to decks via `deckId` - **Access through deck ownership verification**
+
+## 🛡️ Required Database Patterns
+
+### Safe Deck Operations
+
+```typescript
+import { db } from "@/lib/db";
+import { decksTable, cardsTable } from "@/db/schema";
+import { eq, and, desc } from "drizzle-orm";
+
+// ✅ Get user's decks
+async function getUserDecks(userId: string) {
+  return await db.select()
+    .from(decksTable)
+    .where(eq(decksTable.userId, userId))
+    .orderBy(desc(decksTable.createdAt));
+}
+
+// ✅ Get specific deck with ownership verification
+async function getDeckIfOwner(deckId: number, userId: string) {
+  const decks = await db.select()
+    .from(decksTable)
+    .where(and(
+      eq(decksTable.id, deckId),
+      eq(decksTable.userId, userId)
+    ));
+    
+  if (decks.length === 0) {
+    throw new Error("Deck not found or access denied");
+  }
+  
+  return decks[0];
+}
+
+// ✅ Create deck with proper ownership
+async function createDeck(userId: string, title: string, description?: string) {
+  const [newDeck] = await db.insert(decksTable).values({
+    title,
+    description,
+    userId, // MANDATORY: Set owner
+  }).returning();
+  
+  return newDeck;
+}
+```
+
+### Safe Card Operations
+
+```typescript
+// ✅ Get cards through deck ownership verification
+async function getCardsForUserDeck(deckId: number, userId: string) {
+  // First verify deck ownership
+  await getDeckIfOwner(deckId, userId);
+  
+  // Then get cards for the verified deck
+  return await db.select()
+    .from(cardsTable)
+    .where(eq(cardsTable.deckId, deckId))
+    .orderBy(cardsTable.order);
+}
+
+// ✅ Create card with deck ownership verification
+async function createCard(
+  deckId: number, 
+  userId: string, 
+  front: string, 
+  back: string
+) {
+  // Verify deck ownership first
+  await getDeckIfOwner(deckId, userId);
+  
+  const [newCard] = await db.insert(cardsTable).values({
+    deckId,
+    front,
+    back,
+    order: 0, // Or calculate next order
+  }).returning();
+  
+  return newCard;
+}
+
+// ✅ Update card with ownership verification
+async function updateCard(
+  cardId: number,
+  userId: string,
+  updates: { front?: string; back?: string; order?: number }
+) {
+  // First get the card and verify deck ownership
+  const [card] = await db.select()
+    .from(cardsTable)
+    .where(eq(cardsTable.id, cardId));
+    
+  if (!card) {
+    throw new Error("Card not found");
+  }
+  
+  // Verify user owns the deck this card belongs to
+  await getDeckIfOwner(card.deckId, userId);
+  
+  // Safe to update the card
+  const [updatedCard] = await db.update(cardsTable)
+    .set({
+      ...updates,
+      updatedAt: new Date(),
+    })
+    .where(eq(cardsTable.id, cardId))
+    .returning();
+    
+  return updatedCard;
+}
+```
+
+### Advanced Query Patterns
+
+```typescript
+// ✅ Join queries with proper filtering
+async function getDecksWithCardCounts(userId: string) {
+  return await db.select({
+    id: decksTable.id,
+    title: decksTable.title,
+    description: decksTable.description,
+    createdAt: decksTable.createdAt,
+    cardCount: count(cardsTable.id),
+  })
+  .from(decksTable)
+  .leftJoin(cardsTable, eq(decksTable.id, cardsTable.deckId))
+  .where(eq(decksTable.userId, userId)) // MANDATORY filter
+  .groupBy(decksTable.id)
+  .orderBy(desc(decksTable.createdAt));
+}
+
+// ✅ Search user's decks
+async function searchUserDecks(userId: string, searchTerm: string) {
+  return await db.select()
+    .from(decksTable)
+    .where(and(
+      eq(decksTable.userId, userId), // MANDATORY filter
+      or(
+        ilike(decksTable.title, `%${searchTerm}%`),
+        ilike(decksTable.description, `%${searchTerm}%`)
+      )
+    ));
+}
+```
+
+## 🚫 FORBIDDEN Database Patterns
+
+### ❌ Unfiltered Queries
+```typescript
+// ❌ NEVER query decks without user filter
+const allDecks = await db.select().from(decksTable);
+
+// ❌ NEVER query specific deck without ownership verification
+const deck = await db.select()
+  .from(decksTable)
+  .where(eq(decksTable.id, deckId));
+```
+
+### ❌ Direct Card Access
+```typescript
+// ❌ NEVER access cards without verifying deck ownership
+const card = await db.select()
+  .from(cardsTable)
+  .where(eq(cardsTable.id, cardId));
+  
+// ❌ NEVER get all cards for a deck without ownership verification
+const deckCards = await db.select()
+  .from(cardsTable)
+  .where(eq(cardsTable.deckId, deckId));
+```
+
+### ❌ Missing Error Handling
+```typescript
+// ❌ NEVER perform database operations without error handling
+async function badExample(userId: string) {
+  // Missing try-catch - could expose sensitive database errors
+  const decks = await db.select()
+    .from(decksTable)
+    .where(eq(decksTable.userId, userId));
+    
+  return decks;
+}
+```
+
+## ✅ REQUIRED Database Practices
+
+### ✅ Error Handling Wrapper
+```typescript
+async function safeDbOperation<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    console.error("Database operation failed:", error);
+    throw new Error("Database operation failed");
+  }
+}
+
+// Usage
+const userDecks = await safeDbOperation(() =>
+  db.select()
+    .from(decksTable)
+    .where(eq(decksTable.userId, userId))
+);
+```
+
+### ✅ Ownership Verification Utility
+
+Use the security utilities from `src/lib/auth-utils.ts` for consistent ownership verification.
+See the `security-utilities` rule for complete utility functions.
+
+### ✅ Batch Operations with Security
+```typescript
+// ✅ Batch delete cards for user-owned deck
+async function deleteCardsFromUserDeck(deckId: number, userId: string, cardIds: number[]) {
+  // Verify deck ownership first
+  await requireDeckOwnership(deckId, userId);
+  
+  // Safe to delete cards from this deck
+  const result = await db.delete(cardsTable)
+    .where(and(
+      eq(cardsTable.deckId, deckId),
+      inArray(cardsTable.id, cardIds)
+    ))
+    .returning();
+    
+  return result;
+}
+```
+
+### ✅ Transaction Safety
+```typescript
+import { db } from "@/lib/db";
+
+async function createDeckWithCards(
+  userId: string,
+  deckData: { title: string; description?: string },
+  cardsData: { front: string; back: string }[]
+) {
+  return await db.transaction(async (tx) => {
+    // Create deck
+    const [newDeck] = await tx.insert(decksTable).values({
+      ...deckData,
+      userId, // MANDATORY: Set owner
+    }).returning();
+    
+    // Create cards for the new deck
+    if (cardsData.length > 0) {
+      const cardValues = cardsData.map((card, index) => ({
+        ...card,
+        deckId: newDeck.id,
+        order: index,
+      }));
+      
+      await tx.insert(cardsTable).values(cardValues);
+    }
+    
+    return newDeck;
+  });
+}
+```
+
+## 🔒 Security Checklist
+
+Before any database operation:
+- [ ] Is this a user-specific resource? (Yes for decks/cards)
+- [ ] Am I filtering by userId for decks?
+- [ ] Am I verifying deck ownership for card operations?
+- [ ] Do I have proper error handling?
+- [ ] Am I using parameterized queries (Drizzle handles this)?
+- [ ] Am I returning minimal necessary data?
+
+## 🔍 Database Security Testing
+
+When implementing database functions:
+1. **Test with multiple users** - Ensure no cross-user data access
+2. **Test edge cases** - Non-existent IDs, invalid parameters
+3. **Test error conditions** - Network issues, constraint violations
+4. **Verify query efficiency** - Use appropriate indexes and limits
+
+Remember: **The database is your last line of defense**. Even if other security measures fail, proper database patterns prevent data breaches.

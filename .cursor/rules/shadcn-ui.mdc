@@ -1,0 +1,42 @@
+---
+alwaysApply: true
+---
+# shadcn UI Component Library
+
+This project uses **shadcn UI** for all UI elements and components.
+
+## Setup
+
+If shadcn UI is not initialized in the project, use:
+```bash
+npx shadcn@latest init
+```
+
+## Adding Components
+
+When a particular component is not installed, use the following command (replace `button` with the desired component name):
+```bash
+npx shadcn@latest add button
+```
+
+## Guidelines
+
+- **Always use shadcn UI components** for UI elements instead of creating custom components from scratch
+- Check if a component exists in shadcn UI before implementing custom solutions
+- Follow shadcn UI's styling patterns and component composition
+- Use shadcn UI's built-in variant systems for component customization
+- Reference the [shadcn UI documentation](https://ui.shadcn.com/) for available components and usage patterns
+
+## Common Components
+
+Some frequently used shadcn UI components include:
+- `button` - For interactive buttons
+- `input` - For form inputs
+- `card` - For content containers
+- `dialog` - For modals and popups
+- `dropdown-menu` - For dropdown menus
+- `form` - For form handling
+- `table` - For data tables
+- `toast` - For notifications
+
+Always install the required component before using it in your code.

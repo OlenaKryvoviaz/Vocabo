@@ -1,0 +1,143 @@
+---
+alwaysApply: true
+---
+# Clerk Authentication & Data Isolation Security Rules
+
+This project uses **Clerk** for authentication with **CRITICAL** data isolation requirements. Users must **NEVER** be able to access data that doesn't belong to them.
+
+## 🔐 Core Security Principle
+
+**EVERY database query that fetches user-specific data MUST include the user ID filter.**
+
+## Authentication Setup
+
+### Required Imports for Server Components
+```typescript
+import { auth } from "@clerk/nextjs/server";
+import { currentUser } from "@clerk/nextjs/server";
+```
+
+### Required Imports for Client Components
+```typescript
+import { useUser } from "@clerk/nextjs";
+import { SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
+```
+
+## 🚨 MANDATORY Security Patterns
+
+### 1. Server Components - User ID Verification
+
+**ALWAYS** get and verify user ID in server components:
+```typescript
+import { auth } from "@clerk/nextjs/server";
+import { redirect } from "next/navigation";
+
+export default async function SomeComponent() {
+  const { userId } = await auth();
+  
+  if (!userId) {
+    redirect("/sign-in");
+  }
+
+  // Now safe to use userId for database queries
+  // See database-security rule for detailed patterns
+}
+```
+
+### 2. Client Components - User State Check
+
+```typescript
+import { useUser } from "@clerk/nextjs";
+
+export function SomeClientComponent() {
+  const { user, isLoaded } = useUser();
+
+  if (!isLoaded) return <div>Loading...</div>;
+  if (!user) return <div>Please sign in</div>;
+
+  // Safe to use user.id for client-side operations
+  return <div>Welcome {user.firstName}!</div>;
+}
+```
+
+## 🔒 Middleware Configuration
+
+The middleware in [src/middleware.ts](mdc:src/middleware.ts) is correctly configured. **DO NOT** modify the matcher patterns without careful consideration.
+
+## 📱 Page Protection Patterns
+
+### Protected Dashboard Pages
+```typescript
+import { auth } from "@clerk/nextjs/server";
+import { redirect } from "next/navigation";
+
+export default async function DashboardPage() {
+  const { userId } = await auth();
+  
+  if (!userId) {
+    redirect("/sign-in");
+  }
+  
+  // Page content here - see database-security rule for safe data fetching
+}
+```
+
+### Public Pages with Optional Auth
+```typescript
+import { auth } from "@clerk/nextjs/server";
+
+export default async function PublicPage() {
+  const { userId } = await auth();
+  
+  // Conditional content based on auth state
+  if (userId) {
+    // Show authenticated experience
+  } else {
+    // Show public experience with sign-in prompts
+  }
+}
+```
+
+## 🚫 FORBIDDEN Practices
+
+### ❌ Client-Side User ID Usage for Critical Operations
+```typescript
+// ❌ NEVER trust user.id from client for critical operations
+// This can be manipulated by malicious users
+function deleteUserDeck(deckId: number) {
+  const { user } = useUser();
+  // Don't use user.id for server operations from client
+}
+```
+
+## ✅ REQUIRED Practices
+
+### ✅ Always Verify Authentication
+- Every protected route/component MUST check authentication
+- Every API endpoint MUST verify user identity  
+- Every database query MUST filter by authenticated user ID
+
+### ✅ Use Specialized Rules
+- **API routes**: See `api-routes-security` rule for detailed API patterns
+- **Database operations**: See `database-security` rule for safe database patterns  
+- **Utility functions**: See `security-utilities` rule for reusable helpers
+
+## 🔍 Testing Security
+
+When implementing features:
+1. **Always test with multiple user accounts**
+2. **Verify users cannot access each other's data**
+3. **Test API endpoints with different authentication states**
+4. **Verify proper error messages for unauthorized access**
+
+## 📋 Security Checklist
+
+Before deploying any feature that handles user data:
+- [ ] Authentication is verified in all protected routes
+- [ ] Database queries include userId filters
+- [ ] Resource ownership is verified before access
+- [ ] Error messages don't leak data existence to unauthorized users
+- [ ] API endpoints return 401 for unauthenticated requests
+- [ ] API endpoints return 403 for unauthorized resource access
+
+Remember: **Security is not optional**. Every line of code that handles user data must respect the data isolation principle.

@@ -1,4 +1,7 @@
 import Image from "next/image";
+import { SignedIn, SignedOut } from "@clerk/nextjs";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 export default function Home() {
   return (
@@ -12,10 +15,10 @@ export default function Home() {
           height={38}
           priority
         />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
+        <ol className="font-sans list-inside list-decimal text-sm/6 text-center sm:text-left">
           <li className="mb-2 tracking-[-.01em]">
             Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
+            <code className="bg-black/[.05] dark:bg-white/[.06] font-sans font-semibold px-1 py-0.5 rounded">
               src/app/page.tsx
             </code>
             .
@@ -25,31 +28,82 @@ export default function Home() {
           </li>
         </ol>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
+        {/* Authentication-based content */}
+        <SignedOut>
+          <div className="text-center space-y-4">
+            <p className="text-lg text-muted-foreground">
+              Sign in to access your personal dashboard and manage your account.
+            </p>
+            <div className="flex gap-4 items-center flex-col sm:flex-row">
+              <a
+                className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
+                href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Image
+                  className="dark:invert"
+                  src="/vercel.svg"
+                  alt="Vercel logomark"
+                  width={20}
+                  height={20}
+                />
+                Deploy now
+              </a>
+              <a
+                className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
+                href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Read our docs
+              </a>
+            </div>
+          </div>
+        </SignedOut>
+
+        <SignedIn>
+          <div className="text-center space-y-6">
+            <div className="space-y-2">
+              <h2 className="text-2xl font-semibold text-foreground">
+                Welcome back! 👋
+              </h2>
+              <p className="text-lg text-muted-foreground">
+                You're successfully signed in. Access your dashboard to manage your account and view your activity.
+              </p>
+            </div>
+            
+            <div className="flex gap-4 items-center justify-center flex-col sm:flex-row">
+              <Link href="/dashboard">
+                <Button size="lg" className="gap-2">
+                  <span>📊</span>
+                  Go to Dashboard
+                </Button>
+              </Link>
+              <a
+                href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Button variant="outline" size="lg">
+                  Read Docs
+                </Button>
+              </a>
+            </div>
+
+            {/* Quick stats for authenticated users */}
+            <div className="mt-8 grid grid-cols-2 gap-4 max-w-md mx-auto">
+              <div className="text-center p-4 rounded-lg bg-muted/50">
+                <div className="text-xl font-bold text-primary">✓</div>
+                <div className="text-sm text-muted-foreground">Authenticated</div>
+              </div>
+              <div className="text-center p-4 rounded-lg bg-muted/50">
+                <div className="text-xl font-bold text-primary">🚀</div>
+                <div className="text-sm text-muted-foreground">Ready to go</div>
+              </div>
+            </div>
+          </div>
+        </SignedIn>
       </main>
       <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
         <a

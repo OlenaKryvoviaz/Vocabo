@@ -1,0 +1,99 @@
+---
+alwaysApply: true
+---
+# Drizzle Database Interaction Rules
+
+All database interactions in this project **MUST** use the Drizzle ORM with the defined schema from [src/db/schema.ts](mdc:src/db/schema.ts).
+
+## Schema Tables
+
+The project uses two main tables:
+- `decksTable` - For vocabulary decks with fields: id, title, description, userId, createdAt, updatedAt
+- `cardsTable` - For flashcards with fields: id, deckId, front, back, order, createdAt, updatedAt
+
+## Required Imports
+
+Always import the database connection and schema tables:
+
+```typescript
+import { db } from "@/lib/db";
+import { decksTable, cardsTable } from "@/db/schema";
+```
+
+## Database Operation Guidelines
+
+### 1. **ALWAYS use Drizzle queries** - Never write raw SQL
+### 2. **ALWAYS use the schema tables** - Never reference table names as strings
+### 3. **ALWAYS use proper TypeScript types** - Leverage Drizzle's type safety
+
+## Common Query Patterns
+
+### Selecting Data
+```typescript
+// Get all decks for a user
+const userDecks = await db.select().from(decksTable).where(eq(decksTable.userId, userId));
+
+// Get cards for a specific deck
+const deckCards = await db.select().from(cardsTable).where(eq(cardsTable.deckId, deckId));
+```
+
+### Inserting Data
+```typescript
+// Create a new deck
+const [newDeck] = await db.insert(decksTable).values({
+  title: "New Deck",
+  description: "Description",
+  userId: userId,
+}).returning();
+
+// Create a new card
+const [newCard] = await db.insert(cardsTable).values({
+  deckId: deckId,
+  front: "Question",
+  back: "Answer",
+  order: 0,
+}).returning();
+```
+
+### Updating Data
+```typescript
+// Update deck
+await db.update(decksTable)
+  .set({ title: "Updated Title", updatedAt: new Date() })
+  .where(eq(decksTable.id, deckId));
+```
+
+### Deleting Data
+```typescript
+// Delete deck (will cascade delete cards due to foreign key)
+await db.delete(decksTable).where(eq(decksTable.id, deckId));
+```
+
+## Required Operators
+
+Always import necessary operators from `drizzle-orm`:
+```typescript
+import { eq, and, or, desc, asc } from "drizzle-orm";
+```
+
+## Error Handling
+
+Always wrap database operations in try-catch blocks and handle errors appropriately:
+
+```typescript
+try {
+  const result = await db.select().from(decksTable);
+  return result;
+} catch (error) {
+  console.error("Database error:", error);
+  throw new Error("Failed to fetch decks");
+}
+```
+
+## Forbidden Practices
+
+- ❌ **Never** use raw SQL queries
+- ❌ **Never** reference table names as strings
+- ❌ **Never** bypass the schema definitions
+- ❌ **Never** forget to handle the `userId` field for user-specific data
+- ❌ **Never** forget to update `updatedAt` timestamps when modifying records

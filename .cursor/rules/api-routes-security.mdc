@@ -1,0 +1,310 @@
+---
+globs: **/api/**/*.ts,**/api/**/*.js
+description: API routes security and authentication patterns
+---
+
+# API Routes Security Rules
+
+All API routes in this project **MUST** follow strict security patterns to ensure data isolation.
+
+## 🔐 Authentication Template
+
+**EVERY** API route MUST start with this authentication pattern:
+
+```typescript
+import { auth } from "@clerk/nextjs/server";
+import { NextRequest, NextResponse } from "next/server";
+
+export async function GET/POST/PUT/DELETE(request: NextRequest) {
+  const { userId } = await auth();
+  
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Route implementation here...
+}
+```
+
+## 🛡️ Required Security Patterns
+
+### 1. GET Endpoints - Fetch User Data
+```typescript
+export async function GET(request: NextRequest) {
+  const { userId } = await auth();
+  
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const userDecks = await db.select()
+      .from(decksTable)
+      .where(eq(decksTable.userId, userId)); // MANDATORY filter
+      
+    return NextResponse.json(userDecks);
+  } catch (error) {
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+```
+
+### 2. POST Endpoints - Create Resources
+```typescript
+export async function POST(request: NextRequest) {
+  const { userId } = await auth();
+  
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const body = await request.json();
+    
+    // ALWAYS set userId when creating resources
+    const [newDeck] = await db.insert(decksTable).values({
+      title: body.title,
+      description: body.description,
+      userId: userId, // MANDATORY: Set owner
+    }).returning();
+    
+    return NextResponse.json(newDeck);
+  } catch (error) {
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+```
+
+### 3. PUT/PATCH Endpoints - Update Resources
+```typescript
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const { userId } = await auth();
+  
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const deckId = parseInt(params.id);
+    const body = await request.json();
+    
+    // VERIFY OWNERSHIP before updating
+    const existingDeck = await db.select()
+      .from(decksTable)
+      .where(and(
+        eq(decksTable.id, deckId),
+        eq(decksTable.userId, userId)
+      ));
+      
+    if (existingDeck.length === 0) {
+      return NextResponse.json({ error: "Deck not found" }, { status: 404 });
+    }
+    
+    // Safe to update now
+    const [updatedDeck] = await db.update(decksTable)
+      .set({
+        title: body.title,
+        description: body.description,
+        updatedAt: new Date(),
+      })
+      .where(and(
+        eq(decksTable.id, deckId),
+        eq(decksTable.userId, userId) // Double-check ownership
+      ))
+      .returning();
+      
+    return NextResponse.json(updatedDeck);
+  } catch (error) {
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+```
+
+### 4. DELETE Endpoints - Remove Resources
+```typescript
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const { userId } = await auth();
+  
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const deckId = parseInt(params.id);
+    
+    // VERIFY OWNERSHIP before deleting
+    const result = await db.delete(decksTable)
+      .where(and(
+        eq(decksTable.id, deckId),
+        eq(decksTable.userId, userId) // CRITICAL: Only delete if owned
+      ))
+      .returning();
+      
+    if (result.length === 0) {
+      return NextResponse.json({ error: "Deck not found" }, { status: 404 });
+    }
+    
+    return NextResponse.json({ message: "Deck deleted successfully" });
+  } catch (error) {
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+```
+
+## 🎯 Nested Resource Patterns
+
+### Cards API Through Deck Ownership
+```typescript
+// Example: /api/decks/[deckId]/cards
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { deckId: string } }
+) {
+  const { userId } = await auth();
+  
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const deckId = parseInt(params.deckId);
+    
+    // FIRST: Verify deck ownership
+    const deck = await db.select()
+      .from(decksTable)
+      .where(and(
+        eq(decksTable.id, deckId),
+        eq(decksTable.userId, userId)
+      ));
+      
+    if (deck.length === 0) {
+      return NextResponse.json({ error: "Deck not found" }, { status: 404 });
+    }
+    
+    // THEN: Get cards for the verified deck
+    const cards = await db.select()
+      .from(cardsTable)
+      .where(eq(cardsTable.deckId, deckId));
+      
+    return NextResponse.json(cards);
+  } catch (error) {
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+```
+
+## 🚫 FORBIDDEN Patterns
+
+### ❌ Missing Authentication Check
+```typescript
+// ❌ NEVER create API routes without auth check
+export async function GET(request: NextRequest) {
+  // Missing auth check - DANGEROUS!
+  const decks = await db.select().from(decksTable);
+  return NextResponse.json(decks);
+}
+```
+
+### ❌ Using Request Parameters Without Verification
+```typescript
+// ❌ NEVER trust URL parameters without ownership verification
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const { userId } = await auth();
+  
+  // ❌ DANGEROUS - User could access any deck by changing URL
+  const deck = await db.select()
+    .from(decksTable)
+    .where(eq(decksTable.id, parseInt(params.id)));
+}
+```
+
+### ❌ Missing Error Handling
+```typescript
+// ❌ NEVER expose internal errors to users
+export async function GET(request: NextRequest) {
+  const { userId } = await auth();
+  
+  // Missing try-catch - could expose sensitive error info
+  const userDecks = await db.select()
+    .from(decksTable)
+    .where(eq(decksTable.userId, userId));
+    
+  return NextResponse.json(userDecks);
+}
+```
+
+## ✅ REQUIRED Practices
+
+### ✅ Standard Error Responses
+```typescript
+// Authentication error
+return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+// Not found (when resource doesn't exist OR user doesn't own it)
+return NextResponse.json({ error: "Resource not found" }, { status: 404 });
+
+// Server error (catch-all for unexpected errors)
+return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+
+// Validation error
+return NextResponse.json({ error: "Invalid request data" }, { status: 400 });
+```
+
+### ✅ Request Body Validation
+```typescript
+export async function POST(request: NextRequest) {
+  const { userId } = await auth();
+  
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const body = await request.json();
+    
+    // Validate required fields
+    if (!body.title || typeof body.title !== 'string') {
+      return NextResponse.json({ error: "Title is required" }, { status: 400 });
+    }
+    
+    // Continue with creation...
+  } catch (error) {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+}
+```
+
+### ✅ Consistent Response Format
+```typescript
+// Success responses should be consistent
+return NextResponse.json({
+  data: result,
+  message: "Operation successful"
+});
+
+// Error responses should be consistent
+return NextResponse.json({
+  error: "Error message",
+  code: "ERROR_CODE" // Optional error code for client handling
+}, { status: 400 });
+```
+
+## 🔍 Testing API Security
+
+When creating API routes:
+1. **Test without authentication** - Should return 401
+2. **Test with different user accounts** - Should only access own data
+3. **Test with invalid resource IDs** - Should return 404
+4. **Test with malformed request bodies** - Should return 400
+5. **Test edge cases** - Empty results, large payloads, etc.
+
+Remember: **Every API endpoint is a potential security vulnerability** if not properly protected.

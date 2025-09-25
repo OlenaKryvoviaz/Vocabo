@@ -1,0 +1,120 @@
+---
+alwaysApply: true
+---
+# Data Handling Patterns
+
+## Server Components for Data Retrieval
+
+All data retrieval operations must be performed in React Server Components. This includes:
+
+- Database queries for displaying data
+- API calls to external services for read operations
+- Any data fetching that populates the UI
+
+**Example:**
+```typescript
+// ✅ Correct - Server Component fetching data
+export default async function UsersPage() {
+  const users = await db.select().from(usersTable);
+  return <UsersList users={users} />;
+}
+
+// ❌ Incorrect - Client-side data fetching
+"use client";
+export default function UsersPage() {
+  const [users, setUsers] = useState([]);
+  useEffect(() => {
+    fetchUsers().then(setUsers);
+  }, []);
+  return <UsersList users={users} />;
+}
+```
+
+## Server Actions for Data Mutations
+
+All database mutations (CREATE, UPDATE, DELETE operations) must be implemented using Next.js Server Actions:
+
+- Form submissions that modify data
+- Database inserts, updates, and deletions
+- Any operation that changes application state
+
+**Example:**
+```typescript
+// ✅ Correct - Server Action for mutations
+"use server";
+export async function createUser(data: CreateUserInput) {
+  const validatedData = createUserSchema.parse(data);
+  await db.insert(usersTable).values(validatedData);
+}
+
+// ❌ Incorrect - API route for mutations
+// Don't use API routes for database mutations
+```
+
+## Zod Validation Requirements
+
+All data validation must use Zod schemas:
+
+1. **Server Action Input Validation**: Every server action must validate its input using Zod
+2. **TypeScript Integration**: Zod schemas must be used to generate TypeScript types
+3. **No FormData Types**: Never use `FormData` as a type - always extract and validate data
+
+**Example:**
+```typescript
+// ✅ Correct - Zod schema with TypeScript integration
+import { z } from "zod";
+
+const createUserSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  email: z.string().email("Invalid email format"),
+  age: z.number().min(18, "Must be at least 18 years old"),
+});
+
+type CreateUserInput = z.infer<typeof createUserSchema>;
+
+"use server";
+export async function createUser(data: CreateUserInput) {
+  const validatedData = createUserSchema.parse(data);
+  await db.insert(usersTable).values(validatedData);
+}
+
+// ❌ Incorrect - Using FormData without validation
+export async function createUser(formData: FormData) {
+  const name = formData.get("name") as string;
+  await db.insert(usersTable).values({ name });
+}
+```
+
+## Form Handling Pattern
+
+When working with forms, extract and validate data before passing to server actions:
+
+```typescript
+// Client Component
+"use client";
+export function CreateUserForm() {
+  async function handleSubmit(formData: FormData) {
+    const data = {
+      name: formData.get("name") as string,
+      email: formData.get("email") as string,
+      age: Number(formData.get("age")),
+    };
+    
+    await createUser(data); // Pass typed object, not FormData
+  }
+
+  return (
+    <form action={handleSubmit}>
+      {/* form fields */}
+    </form>
+  );
+}
+```
+
+## Key Rules Summary
+
+1. **Data Retrieval**: Always use Server Components
+2. **Data Mutations**: Always use Server Actions
+3. **Validation**: Always use Zod schemas
+4. **Typing**: Always use TypeScript types derived from Zod schemas
+5. **No FormData**: Never use `FormData` as a parameter type in server actions
