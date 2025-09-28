@@ -36,7 +36,7 @@ export default async function SomeComponent() {
   const { userId } = await auth();
   
   if (!userId) {
-    redirect("/sign-in");
+    redirect("/");
   }
 
   // Now safe to use userId for database queries
@@ -75,7 +75,7 @@ export default async function DashboardPage() {
   const { userId } = await auth();
   
   if (!userId) {
-    redirect("/sign-in");
+    redirect("/");
   }
   
   // Page content here - see database-security rule for safe data fetching
@@ -93,7 +93,7 @@ export default async function PublicPage() {
   if (userId) {
     // Show authenticated experience
   } else {
-    // Show public experience with sign-in prompts
+    // Show public experience with sign-in/sign-up buttons
   }
 }
 ```

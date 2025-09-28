@@ -1,8 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
-import { decksTable, cardsTable } from "@/db/schema";
-import { eq, count, desc } from "drizzle-orm";
+import { getDecksWithCardCounts } from "@/db/queries";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Plus, BookOpen, Clock, Users } from "lucide-react";
@@ -12,23 +10,11 @@ export default async function DashboardPage() {
   const { userId } = await auth();
   
   if (!userId) {
-    redirect("/sign-in");
+    redirect("/");
   }
 
   // Fetch user's decks with card counts
-  const userDecks = await db.select({
-    id: decksTable.id,
-    title: decksTable.title,
-    description: decksTable.description,
-    createdAt: decksTable.createdAt,
-    updatedAt: decksTable.updatedAt,
-    cardCount: count(cardsTable.id),
-  })
-  .from(decksTable)
-  .leftJoin(cardsTable, eq(decksTable.id, cardsTable.deckId))
-  .where(eq(decksTable.userId, userId))
-  .groupBy(decksTable.id)
-  .orderBy(desc(decksTable.createdAt));
+  const userDecks = await getDecksWithCardCounts(userId);
 
   // Calculate statistics
   const totalDecks = userDecks.length;

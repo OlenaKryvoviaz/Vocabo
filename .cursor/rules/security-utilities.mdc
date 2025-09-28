@@ -18,14 +18,14 @@ import { decksTable } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 
 /**
- * Get authenticated user ID or redirect to sign-in
+ * Get authenticated user ID or redirect to homepage
  * Use in server components and pages
  */
 export async function requireAuth(): Promise<string> {
   const { userId } = await auth();
   
   if (!userId) {
-    redirect("/sign-in");
+    redirect("/");
   }
   
   return userId;

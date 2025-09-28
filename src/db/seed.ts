@@ -1,35 +1,42 @@
 import 'dotenv/config';
-import { eq } from 'drizzle-orm';
 import { db } from '../lib/db';
-import { usersTable } from './schema';
+import { decksTable, cardsTable } from './schema';
 
 async function main() {
-  // Create a new user
-  const user: typeof usersTable.$inferInsert = {
-    name: 'John',
-    age: 30,
-    email: 'john@example.com',
-  };
+  console.log('Seeding database with sample data...');
 
-  await db.insert(usersTable).values(user);
-  console.log('New user created!');
+  // Create a sample deck
+  const [sampleDeck] = await db.insert(decksTable).values({
+    title: 'Sample Vocabulary Deck',
+    description: 'A sample deck for testing purposes',
+    userId: 'sample_user_id', // This would normally come from Clerk
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }).returning();
 
-  // Get all users
-  const users = await db.select().from(usersTable);
-  console.log('Getting all users from the database: ', users);
+  console.log('Sample deck created:', sampleDeck);
 
-  // Update user
-  await db
-    .update(usersTable)
-    .set({
-      age: 31,
-    })
-    .where(eq(usersTable.email, user.email));
-  console.log('User info updated!');
+  // Create sample cards for the deck
+  const sampleCards = [
+    { front: 'Hello', back: 'Hola' },
+    { front: 'Goodbye', back: 'Adiós' },
+    { front: 'Thank you', back: 'Gracias' },
+  ];
 
-  // Delete user
-  await db.delete(usersTable).where(eq(usersTable.email, user.email));
-  console.log('User deleted!');
+  for (let i = 0; i < sampleCards.length; i++) {
+    const card = sampleCards[i];
+    await db.insert(cardsTable).values({
+      deckId: sampleDeck.id,
+      front: card.front,
+      back: card.back,
+      order: i,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+  }
+
+  console.log(`Created ${sampleCards.length} sample cards`);
+  console.log('Database seeding completed!');
 }
 
 main().catch(console.error);

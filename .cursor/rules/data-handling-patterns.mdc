@@ -1,120 +1,238 @@
----
-alwaysApply: true
----
 # Data Handling Patterns
+
+## Database Query Organization
+
+All database operations must be organized into reusable helper functions within the `src/db/queries/` directory. This promotes code reusability, testability, and separation of concerns.
+
+## Directory Structure
+
+```
+src/
+  db/
+    queries/
+      decks.ts       # Deck-related database operations
+      cards.ts       # Card-related database operations
+      users.ts       # User-related database operations (if needed)
+      index.ts       # Re-export all query functions
+```
 
 ## Server Components for Data Retrieval
 
-All data retrieval operations must be performed in React Server Components. This includes:
-
-- Database queries for displaying data
-- API calls to external services for read operations
-- Any data fetching that populates the UI
+Server Components should use query helper functions for data retrieval, never perform database operations directly:
 
 **Example:**
 ```typescript
-// ✅ Correct - Server Component fetching data
-export default async function UsersPage() {
-  const users = await db.select().from(usersTable);
-  return <UsersList users={users} />;
+// ✅ Correct - Server Component using query helpers
+import { getDecksByUserId } from "@/db/queries/decks";
+
+export default async function DecksPage() {
+  const { userId } = await auth();
+  if (!userId) redirect("/");
+  
+  const decks = await getDecksByUserId(userId);
+  return <DecksList decks={decks} />;
 }
 
-// ❌ Incorrect - Client-side data fetching
-"use client";
-export default function UsersPage() {
-  const [users, setUsers] = useState([]);
-  useEffect(() => {
-    fetchUsers().then(setUsers);
-  }, []);
-  return <UsersList users={users} />;
+// ❌ Incorrect - Direct database operations in components
+import { db } from "@/lib/db";
+import { decksTable } from "@/db/schema";
+
+export default async function DecksPage() {
+  const { userId } = await auth();
+  if (!userId) redirect("/");
+  
+  const decks = await db.select().from(decksTable).where(eq(decksTable.userId, userId));
+  return <DecksList decks={decks} />;
 }
 ```
 
 ## Server Actions for Data Mutations
 
-All database mutations (CREATE, UPDATE, DELETE operations) must be implemented using Next.js Server Actions:
-
-- Form submissions that modify data
-- Database inserts, updates, and deletions
-- Any operation that changes application state
+Server Actions should use mutation helper functions, never perform database operations directly:
 
 **Example:**
 ```typescript
-// ✅ Correct - Server Action for mutations
+// ✅ Correct - Server Action using mutation helpers
+import { createDeck, updateDeck, deleteDeck } from "@/db/queries/decks";
+
 "use server";
-export async function createUser(data: CreateUserInput) {
-  const validatedData = createUserSchema.parse(data);
-  await db.insert(usersTable).values(validatedData);
+export async function createDeckAction(data: CreateDeckInput) {
+  const { userId } = await auth();
+  if (!userId) throw new Error("Unauthorized");
+  
+  const validatedData = createDeckSchema.parse(data);
+  return await createDeck({ ...validatedData, userId });
 }
 
-// ❌ Incorrect - API route for mutations
-// Don't use API routes for database mutations
+// ❌ Incorrect - Direct database operations in server actions
+import { db } from "@/lib/db";
+import { decksTable } from "@/db/schema";
+
+"use server";
+export async function createDeckAction(data: CreateDeckInput) {
+  const { userId } = await auth();
+  if (!userId) throw new Error("Unauthorized");
+  
+  const validatedData = createDeckSchema.parse(data);
+  await db.insert(decksTable).values({ ...validatedData, userId });
+}
+```
+
+## Query Helper Function Patterns
+
+### Query Functions (Read Operations)
+
+```typescript
+// src/db/queries/decks.ts
+import { db } from "@/lib/db";
+import { decksTable, cardsTable } from "@/db/schema";
+import { eq, and, desc } from "drizzle-orm";
+
+export async function getDecksByUserId(userId: string) {
+  return await db.select().from(decksTable)
+    .where(eq(decksTable.userId, userId))
+    .orderBy(desc(decksTable.updatedAt));
+}
+
+export async function getDeckWithCards(deckId: number, userId: string) {
+  const deck = await db.select().from(decksTable)
+    .where(and(eq(decksTable.id, deckId), eq(decksTable.userId, userId)))
+    .limit(1);
+    
+  if (!deck.length) return null;
+  
+  const cards = await db.select().from(cardsTable)
+    .where(eq(cardsTable.deckId, deckId))
+    .orderBy(cardsTable.order);
+    
+  return { ...deck[0], cards };
+}
+
+export async function getDeckById(deckId: number, userId: string) {
+  const result = await db.select().from(decksTable)
+    .where(and(eq(decksTable.id, deckId), eq(decksTable.userId, userId)))
+    .limit(1);
+    
+  return result[0] || null;
+}
+```
+
+### Mutation Functions (Write Operations)
+
+```typescript
+// src/db/queries/decks.ts (continued)
+import type { InsertDeck, UpdateDeck } from "@/db/schema";
+
+export async function createDeck(data: InsertDeck) {
+  const [newDeck] = await db.insert(decksTable).values({
+    ...data,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }).returning();
+  
+  return newDeck;
+}
+
+export async function updateDeck(deckId: number, userId: string, data: Partial<UpdateDeck>) {
+  const [updatedDeck] = await db.update(decksTable)
+    .set({ ...data, updatedAt: new Date() })
+    .where(and(eq(decksTable.id, deckId), eq(decksTable.userId, userId)))
+    .returning();
+    
+  return updatedDeck;
+}
+
+export async function deleteDeck(deckId: number, userId: string) {
+  const [deletedDeck] = await db.delete(decksTable)
+    .where(and(eq(decksTable.id, deckId), eq(decksTable.userId, userId)))
+    .returning();
+    
+  return deletedDeck;
+}
+```
+
+## Index File for Re-exports
+
+```typescript
+// src/db/queries/index.ts
+export * from "./decks";
+export * from "./cards";
+export * from "./users";
 ```
 
 ## Zod Validation Requirements
 
-All data validation must use Zod schemas:
+All query helper functions must validate their input using Zod schemas when accepting user data:
 
-1. **Server Action Input Validation**: Every server action must validate its input using Zod
-2. **TypeScript Integration**: Zod schemas must be used to generate TypeScript types
-3. **No FormData Types**: Never use `FormData` as a type - always extract and validate data
+1. **Input Validation**: Validate all user-provided data before database operations
+2. **TypeScript Integration**: Use Zod schemas to generate TypeScript types
+3. **Consistent Error Handling**: Use consistent error patterns across all queries
 
 **Example:**
 ```typescript
-// ✅ Correct - Zod schema with TypeScript integration
 import { z } from "zod";
 
-const createUserSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  email: z.string().email("Invalid email format"),
-  age: z.number().min(18, "Must be at least 18 years old"),
+const createDeckSchema = z.object({
+  title: z.string().min(1, "Title is required").max(100),
+  description: z.string().max(500).optional(),
 });
 
-type CreateUserInput = z.infer<typeof createUserSchema>;
+const updateDeckSchema = createDeckSchema.partial();
 
-"use server";
-export async function createUser(data: CreateUserInput) {
-  const validatedData = createUserSchema.parse(data);
-  await db.insert(usersTable).values(validatedData);
-}
+export type CreateDeckInput = z.infer<typeof createDeckSchema>;
+export type UpdateDeckInput = z.infer<typeof updateDeckSchema>;
 
-// ❌ Incorrect - Using FormData without validation
-export async function createUser(formData: FormData) {
-  const name = formData.get("name") as string;
-  await db.insert(usersTable).values({ name });
+export async function createDeck(input: CreateDeckInput & { userId: string }) {
+  const validatedData = createDeckSchema.parse(input);
+  // ... database operation
 }
 ```
 
-## Form Handling Pattern
+## Error Handling Pattern
 
-When working with forms, extract and validate data before passing to server actions:
+All query functions must implement consistent error handling:
 
 ```typescript
-// Client Component
-"use client";
-export function CreateUserForm() {
-  async function handleSubmit(formData: FormData) {
-    const data = {
-      name: formData.get("name") as string,
-      email: formData.get("email") as string,
-      age: Number(formData.get("age")),
-    };
-    
-    await createUser(data); // Pass typed object, not FormData
+export async function getDeckById(deckId: number, userId: string) {
+  try {
+    const result = await db.select().from(decksTable)
+      .where(and(eq(decksTable.id, deckId), eq(decksTable.userId, userId)))
+      .limit(1);
+      
+    return result[0] || null;
+  } catch (error) {
+    console.error("Error fetching deck:", error);
+    throw new Error("Failed to fetch deck");
   }
-
-  return (
-    <form action={handleSubmit}>
-      {/* form fields */}
-    </form>
-  );
 }
 ```
+
+## Security Requirements
+
+All query functions MUST enforce data isolation:
+
+1. **User ID Validation**: Every query that accesses user-specific data must include userId in the WHERE clause
+2. **Resource Ownership**: Always verify the user owns the resource before returning or modifying it
+3. **Authorization**: Never trust client-provided user IDs - always get userId from authentication
 
 ## Key Rules Summary
 
-1. **Data Retrieval**: Always use Server Components
-2. **Data Mutations**: Always use Server Actions
-3. **Validation**: Always use Zod schemas
-4. **Typing**: Always use TypeScript types derived from Zod schemas
-5. **No FormData**: Never use `FormData` as a parameter type in server actions
+1. **Query Organization**: All database operations must be in `src/db/queries/` helper functions
+2. **Separation of Concerns**: Server Components and Server Actions should only call query helpers
+3. **Data Isolation**: Every query must enforce user-specific data access
+4. **Validation**: Use Zod schemas for all user input validation
+5. **Error Handling**: Implement consistent error handling patterns
+6. **TypeScript**: Leverage full TypeScript integration with Drizzle and Zod
+7. **No Direct DB Operations**: Never perform database operations directly in components or actions
+
+## Migration from Direct DB Operations
+
+When refactoring existing code:
+
+1. **Identify** all direct database operations in components and actions
+2. **Extract** these operations into appropriately named query helper functions
+3. **Move** the functions to the correct file in `src/db/queries/`
+4. **Replace** direct operations with calls to the helper functions
+5. **Test** that all functionality works correctly after refactoring
+
+This pattern ensures better code organization, reusability, testability, and maintains the security requirements for user data isolation.
