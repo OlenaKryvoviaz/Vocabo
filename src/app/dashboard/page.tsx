@@ -1,166 +1,159 @@
-import { SignedIn, SignedOut, RedirectToSignIn, useUser } from "@clerk/nextjs";
+import { auth } from "@clerk/nextjs/server";
+import { redirect } from "next/navigation";
+import { db } from "@/lib/db";
+import { decksTable, cardsTable } from "@/db/schema";
+import { eq, count, desc } from "drizzle-orm";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import Link from "next/link";
+import { Plus, BookOpen, Clock, Users } from "lucide-react";
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  // Verify authentication and get user ID
+  const { userId } = await auth();
+  
+  if (!userId) {
+    redirect("/sign-in");
+  }
+
+  // Fetch user's decks with card counts
+  const userDecks = await db.select({
+    id: decksTable.id,
+    title: decksTable.title,
+    description: decksTable.description,
+    createdAt: decksTable.createdAt,
+    updatedAt: decksTable.updatedAt,
+    cardCount: count(cardsTable.id),
+  })
+  .from(decksTable)
+  .leftJoin(cardsTable, eq(decksTable.id, cardsTable.deckId))
+  .where(eq(decksTable.userId, userId))
+  .groupBy(decksTable.id)
+  .orderBy(desc(decksTable.createdAt));
+
+  // Calculate statistics
+  const totalDecks = userDecks.length;
+  const totalCards = userDecks.reduce((sum, deck) => sum + deck.cardCount, 0);
+  const recentDecks = userDecks.filter(deck => {
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    return new Date(deck.createdAt) > oneWeekAgo;
+  }).length;
+
   return (
-    <>
-      <SignedOut>
-        <RedirectToSignIn />
-      </SignedOut>
-      <SignedIn>
-        <DashboardContent />
-      </SignedIn>
-    </>
-  );
-}
-
-function DashboardContent() {
-  return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-foreground mb-2">Dashboard</h1>
-        <p className="text-muted-foreground">Welcome to your personal dashboard</p>
+    <div className="container mx-auto p-6 space-y-8">
+      {/* Dashboard Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold">Dashboard</h1>
+          <p className="text-muted-foreground">
+            Manage your vocabulary decks and track your learning progress
+          </p>
+        </div>
+        <Button className="flex items-center gap-2">
+          <Plus className="h-4 w-4" />
+          Create New Deck
+        </Button>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {/* Profile Overview Card */}
+      {/* Statistics Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-              Profile Overview
-            </CardTitle>
-            <CardDescription>
-              Manage your account settings and preferences
-            </CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Decks</CardTitle>
+            <BookOpen className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Status</span>
-                <span className="text-sm font-medium text-green-600">Active</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Member since</span>
-                <span className="text-sm font-medium">Today</span>
-              </div>
-              <Button variant="outline" size="sm" className="w-full mt-3">
-                Edit Profile
-              </Button>
-            </div>
+            <div className="text-2xl font-bold">{totalDecks}</div>
+            <p className="text-xs text-muted-foreground">
+              {recentDecks} created this week
+            </p>
           </CardContent>
         </Card>
-
-        {/* Recent Activity Card */}
+        
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-              Recent Activity
-            </CardTitle>
-            <CardDescription>
-              Your latest actions and updates
-            </CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Cards</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
-                  <span className="text-xs font-medium text-blue-600 dark:text-blue-400">🎉</span>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Signed up successfully</p>
-                  <p className="text-xs text-muted-foreground">Just now</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center">
-                  <span className="text-xs font-medium text-green-600 dark:text-green-400">✓</span>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Dashboard accessed</p>
-                  <p className="text-xs text-muted-foreground">Just now</p>
-                </div>
-              </div>
-            </div>
+            <div className="text-2xl font-bold">{totalCards}</div>
+            <p className="text-xs text-muted-foreground">
+              Across all your decks
+            </p>
           </CardContent>
         </Card>
-
-        {/* Quick Actions Card */}
+        
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-              Quick Actions
-            </CardTitle>
-            <CardDescription>
-              Common tasks and shortcuts
-            </CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Study Sessions</CardTitle>
+            <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              <Button variant="outline" size="sm" className="w-full justify-start">
-                📊 View Analytics
-              </Button>
-              <Button variant="outline" size="sm" className="w-full justify-start">
-                ⚙️ Account Settings
-              </Button>
-              <Button variant="outline" size="sm" className="w-full justify-start">
-                📁 Manage Files
-              </Button>
-              <Button variant="outline" size="sm" className="w-full justify-start">
-                💬 Support Chat
-              </Button>
-            </div>
+            <div className="text-2xl font-bold">0</div>
+            <p className="text-xs text-muted-foreground">
+              No sessions yet
+            </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Statistics Section */}
-      <div className="mt-8 grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">12</div>
-              <div className="text-sm text-muted-foreground">Total Projects</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">98%</div>
-              <div className="text-sm text-muted-foreground">Success Rate</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-purple-600">24</div>
-              <div className="text-sm text-muted-foreground">Tasks Done</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-orange-600">5.0</div>
-              <div className="text-sm text-muted-foreground">Rating</div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Decks Section */}
+      <div className="space-y-4">
+        <div className="flex justify-between items-center">
+          <h2 className="text-2xl font-semibold">Your Decks</h2>
+          {userDecks.length > 0 && (
+            <Button variant="outline" size="sm">
+              View All
+            </Button>
+          )}
+        </div>
 
-      {/* Back to Home */}
-      <div className="mt-8 text-center">
-        <Link href="/">
-          <Button variant="outline">
-            ← Back to Home
-          </Button>
-        </Link>
+        {userDecks.length === 0 ? (
+          <Card className="p-8 text-center">
+            <div className="flex flex-col items-center space-y-4">
+              <BookOpen className="h-12 w-12 text-muted-foreground" />
+              <div className="space-y-2">
+                <h3 className="text-lg font-semibold">No decks yet</h3>
+                <p className="text-muted-foreground max-w-sm">
+                  Create your first vocabulary deck to start learning!
+                </p>
+              </div>
+              <Button className="flex items-center gap-2">
+                <Plus className="h-4 w-4" />
+                Create Your First Deck
+              </Button>
+            </div>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {userDecks.map((deck) => (
+              <Card key={deck.id} className="hover:shadow-lg transition-shadow cursor-pointer">
+                <CardHeader>
+                  <CardTitle className="line-clamp-1">{deck.title}</CardTitle>
+                  <CardDescription className="line-clamp-2">
+                    {deck.description || "No description"}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex justify-between text-sm text-muted-foreground">
+                    <span>{deck.cardCount} cards</span>
+                    <span>
+                      {deck.createdAt.toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="default" size="sm" className="flex-1">
+                      Study
+                    </Button>
+                    <Button variant="outline" size="sm" className="flex-1">
+                      Edit
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
