@@ -7,6 +7,8 @@ import { getCardsByDeckId } from "@/db/queries/cards";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, BookOpen, Plus, Edit } from "lucide-react";
+import { AddCardDialog } from "@/components/add-card-dialog";
+import { EditDeckDialog } from "@/components/edit-deck-dialog";
 
 interface DeckPageProps {
   params: Promise<{
@@ -55,14 +57,12 @@ export default async function DeckPage({ params }: DeckPageProps) {
             </div>
           </div>
           <div className="flex items-center space-x-2">
-            <Button variant="outline" className="flex items-center gap-2">
-              <Edit className="h-4 w-4" />
-              Edit Deck
-            </Button>
-            <Button className="flex items-center gap-2">
-              <Plus className="h-4 w-4" />
-              Add Card
-            </Button>
+            <EditDeckDialog 
+              deckId={deckId}
+              currentTitle={deck.title}
+              currentDescription={deck.description}
+            />
+            <AddCardDialog deckId={deckId} />
           </div>
         </div>
 
@@ -94,10 +94,12 @@ export default async function DeckPage({ params }: DeckPageProps) {
                     Add your first card to start building this vocabulary deck!
                   </p>
                 </div>
-                <Button className="flex items-center gap-2">
-                  <Plus className="h-4 w-4" />
-                  Add Your First Card
-                </Button>
+                <AddCardDialog deckId={deckId}>
+                  <Button className="flex items-center gap-2">
+                    <Plus className="h-4 w-4" />
+                    Add Your First Card
+                  </Button>
+                </AddCardDialog>
               </div>
             </Card>
           ) : (
