@@ -6,9 +6,11 @@ import { getDeckIfOwner } from "@/db/queries/decks";
 import { getCardsByDeckId } from "@/db/queries/cards";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, BookOpen, Plus, Edit } from "lucide-react";
+import { ArrowLeft, BookOpen, Plus, Edit, Trash2 } from "lucide-react";
 import { AddCardDialog } from "@/components/add-card-dialog";
 import { EditDeckDialog } from "@/components/edit-deck-dialog";
+import { EditCardDialog } from "@/components/edit-card-dialog";
+import { DeleteCardDialog } from "@/components/delete-card-dialog";
 
 interface DeckPageProps {
   params: Promise<{
@@ -104,26 +106,43 @@ export default async function DeckPage({ params }: DeckPageProps) {
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {cards.map((card, index) => (
+              {cards.map((card) => (
                 <Card key={card.id} className="hover:shadow-md transition-shadow">
-                  <CardHeader className="pb-3">
-                    <div className="flex justify-between items-start">
-                      <CardTitle className="text-sm font-medium text-muted-foreground">
-                        Card #{index + 1}
-                      </CardTitle>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                        <Edit className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
+                  <CardContent className="p-4 space-y-4">
                     <div>
-                      <p className="text-xs font-medium text-muted-foreground mb-1">Front</p>
-                      <p className="font-medium">{card.front}</p>
+                      <p className="text-sm font-medium text-foreground mb-2">Front</p>
+                      <div className="bg-muted/50 rounded-md p-3">
+                        <p className="text-base font-medium">{card.front}</p>
+                      </div>
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-muted-foreground mb-1">Back</p>
-                      <p className="text-sm text-muted-foreground">{card.back}</p>
+                      <p className="text-sm font-medium text-foreground mb-2">Back</p>
+                      <div className="bg-muted/50 rounded-md p-3">
+                        <p className="text-base font-medium">{card.back}</p>
+                      </div>
+                    </div>
+                    <div className="flex space-x-2">
+                      <EditCardDialog
+                        cardId={card.id}
+                        deckId={deckId}
+                        currentFront={card.front}
+                        currentBack={card.back}
+                      >
+                        <Button variant="outline" className="flex-1">
+                          <Edit className="h-4 w-4 mr-2" />
+                          Edit
+                        </Button>
+                      </EditCardDialog>
+                      <DeleteCardDialog
+                        cardId={card.id}
+                        deckId={deckId}
+                        cardFront={card.front}
+                      >
+                        <Button variant="outline" className="flex-1">
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete
+                        </Button>
+                      </DeleteCardDialog>
                     </div>
                   </CardContent>
                 </Card>

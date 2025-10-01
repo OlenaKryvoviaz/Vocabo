@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { cardsTable } from "@/db/schema";
-import { eq, and, asc } from "drizzle-orm";
+import { eq, and, asc, desc } from "drizzle-orm";
 import type { InferSelectModel, InferInsertModel } from "drizzle-orm";
 import { getDeckIfOwner } from "./decks";
 
@@ -20,7 +20,7 @@ export async function getCardsByDeckId(deckId: number, userId: string): Promise<
     return await db.select()
       .from(cardsTable)
       .where(eq(cardsTable.deckId, deckId))
-      .orderBy(asc(cardsTable.order), asc(cardsTable.createdAt));
+      .orderBy(desc(cardsTable.updatedAt));
   } catch (error) {
     console.error("Error fetching cards for deck:", error);
     throw error;
