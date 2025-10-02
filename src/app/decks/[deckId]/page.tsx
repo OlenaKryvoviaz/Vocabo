@@ -80,9 +80,11 @@ export default async function DeckPage({ params }: DeckPageProps) {
           <div className="flex justify-between items-center">
             <h2 className="text-2xl font-semibold">Cards</h2>
             {cards.length > 0 && (
-              <Button variant="outline" size="sm">
-                Study Deck
-              </Button>
+              <Link href={`/decks/${deckId}/study`}>
+                <Button variant="outline" size="sm">
+                  Study Deck
+                </Button>
+              </Link>
             )}
           </div>
 
@@ -155,12 +157,16 @@ export default async function DeckPage({ params }: DeckPageProps) {
         {cards.length > 0 && (
           <div className="flex justify-center">
             <div className="flex space-x-4">
-              <Button size="lg" className="px-8">
-                Start Studying
-              </Button>
-              <Button variant="outline" size="lg">
-                Practice Mode
-              </Button>
+              <Link href={`/decks/${deckId}/study`}>
+                <Button size="lg" className="px-8">
+                  Start Studying
+                </Button>
+              </Link>
+              <Link href={`/decks/${deckId}/study`}>
+                <Button variant="outline" size="lg">
+                  Practice Mode
+                </Button>
+              </Link>
             </div>
           </div>
         )}
