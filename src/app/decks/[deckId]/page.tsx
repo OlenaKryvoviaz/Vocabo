@@ -11,6 +11,7 @@ import { AddCardDialog } from "@/components/add-card-dialog";
 import { EditDeckDialog } from "@/components/edit-deck-dialog";
 import { EditCardDialog } from "@/components/edit-card-dialog";
 import { DeleteCardDialog } from "@/components/delete-card-dialog";
+import { DeleteDeckDialog } from "@/components/delete-deck-dialog";
 
 interface DeckPageProps {
   params: Promise<{
@@ -64,28 +65,40 @@ export default async function DeckPage({ params }: DeckPageProps) {
               currentTitle={deck.title}
               currentDescription={deck.description}
             />
+            <DeleteDeckDialog
+              deckId={deckId}
+              deckTitle={deck.title}
+              cardCount={cards.length}
+            >
+              <Button variant="outline" size="sm">
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Deck
+              </Button>
+            </DeleteDeckDialog>
             <AddCardDialog deckId={deckId} />
           </div>
         </div>
 
         {/* Deck Info */}
-        <div className="flex items-center space-x-6 text-sm text-muted-foreground">
-          <span>{cards.length} {cards.length === 1 ? 'card' : 'cards'}</span>
-          <span>Created: {deck.createdAt.toLocaleDateString()}</span>
-          <span>Updated: {deck.updatedAt.toLocaleDateString()}</span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-6 text-sm text-muted-foreground">
+            <span>{cards.length} {cards.length === 1 ? 'card' : 'cards'}</span>
+            <span>Created: {deck.createdAt.toLocaleDateString()}</span>
+            <span>Updated: {deck.updatedAt.toLocaleDateString()}</span>
+          </div>
+          {cards.length > 0 && (
+            <Link href={`/decks/${deckId}/study`}>
+              <Button size="lg" className="px-8">
+                Start Studying
+              </Button>
+            </Link>
+          )}
         </div>
 
         {/* Cards Section */}
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <h2 className="text-2xl font-semibold">Cards</h2>
-            {cards.length > 0 && (
-              <Link href={`/decks/${deckId}/study`}>
-                <Button variant="outline" size="sm">
-                  Study Deck
-                </Button>
-              </Link>
-            )}
           </div>
 
           {cards.length === 0 ? (
@@ -152,24 +165,6 @@ export default async function DeckPage({ params }: DeckPageProps) {
             </div>
           )}
         </div>
-
-        {/* Study Actions */}
-        {cards.length > 0 && (
-          <div className="flex justify-center">
-            <div className="flex space-x-4">
-              <Link href={`/decks/${deckId}/study`}>
-                <Button size="lg" className="px-8">
-                  Start Studying
-                </Button>
-              </Link>
-              <Link href={`/decks/${deckId}/study`}>
-                <Button variant="outline" size="lg">
-                  Practice Mode
-                </Button>
-              </Link>
-            </div>
-          </div>
-        )}
       </div>
     );
   } catch (error) {

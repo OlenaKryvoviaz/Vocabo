@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { CreateDeckDialog } from "@/components/create-deck-dialog";
 import { Plus, BookOpen, Clock, Calendar } from "lucide-react";
 
 export default async function DashboardPage() {
@@ -31,10 +32,12 @@ export default async function DashboardPage() {
           </p>
         </div>
         <div className="flex justify-start">
-          <Button size="sm" variant="outline" className="flex items-center gap-2 text-xs h-8 px-3">
-            <Plus className="h-3 w-3" />
-            Create New Deck
-          </Button>
+          <CreateDeckDialog>
+            <Button size="sm" variant="outline" className="flex items-center gap-2 text-xs h-8 px-3">
+              <Plus className="h-3 w-3" />
+              Create New Deck
+            </Button>
+          </CreateDeckDialog>
         </div>
       </div>
       
@@ -71,10 +74,12 @@ export default async function DashboardPage() {
                   Create your first vocabulary deck to start learning and practicing new words!
                 </p>
               </div>
-              <Button size="lg" className="flex items-center gap-2">
-                <Plus className="h-4 w-4" />
-                Create Your First Deck
-              </Button>
+              <CreateDeckDialog>
+                <Button size="lg" className="flex items-center gap-2">
+                  <Plus className="h-4 w-4" />
+                  Create Your First Deck
+                </Button>
+              </CreateDeckDialog>
             </div>
           </Card>
         ) : (

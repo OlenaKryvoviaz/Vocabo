@@ -38,7 +38,10 @@ export default async function HomePage() {
               <DialogHeader className="sr-only">
                 <DialogTitle>Sign In</DialogTitle>
               </DialogHeader>
-              <SignIn afterSignInUrl="/dashboard" />
+              <SignIn 
+                afterSignInUrl="/dashboard" 
+                routing="hash"
+              />
             </DialogContent>
           </Dialog>
           <Dialog>
@@ -51,7 +54,10 @@ export default async function HomePage() {
               <DialogHeader className="sr-only">
                 <DialogTitle>Sign Up</DialogTitle>
               </DialogHeader>
-              <SignUp afterSignUpUrl="/dashboard" />
+              <SignUp 
+                afterSignUpUrl="/dashboard"
+                routing="hash" 
+              />
             </DialogContent>
           </Dialog>
         </div>
