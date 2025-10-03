@@ -1,0 +1,320 @@
+---
+alwaysApply: true
+---
+# Clerk Billing Implementation Guide
+
+This vocabulary app uses **Clerk Billing** for subscription management and feature gating. All billing-related implementations must follow these patterns.
+
+## Available Plans
+
+The app supports these subscription plans:
+- `free_user` - Default free tier with limited features
+- `pro` - Premium subscription with full access
+
+## Available Features
+
+The app uses these feature flags for access control:
+- `3_deck_limit` - Restricts users to maximum 3 vocabulary decks (free tier)
+- `unlimited_decks` - Allows unlimited vocabulary decks (pro tier)
+- `ai_flashcard_generation` - Enables AI-powered flashcard creation (pro tier)
+
+## 🔐 Access Control Patterns
+
+### Server Components - Using `has()` Method
+
+**ALWAYS** use the `has()` method for server-side access control:
+
+```typescript
+import { auth } from '@clerk/nextjs/server';
+
+export default async function SomeServerComponent() {
+  const { has, userId } = await auth();
+  
+  if (!userId) {
+    redirect('/');
+  }
+
+  // Check for specific plan
+  const isProUser = has({ plan: 'pro' });
+  const isFreeUser = has({ plan: 'free_user' });
+  
+  // Check for specific features
+  const hasUnlimitedDecks = has({ feature: 'unlimited_decks' });
+  const hasAIGeneration = has({ feature: 'ai_flashcard_generation' });
+  const hasThreeDeckLimit = has({ feature: '3_deck_limit' });
+
+  // Use these checks to control content rendering
+  if (!hasUnlimitedDecks) {
+    // Show upgrade prompt or limit functionality
+  }
+}
+```
+
+### Client Components - Using `<Protect>` Component
+
+**ALWAYS** use the `<Protect>` component for client-side access control:
+
+```typescript
+import { Protect } from '@clerk/nextjs';
+
+export function FeatureGatedComponent() {
+  return (
+    <>
+      {/* Protect entire sections based on plans */}
+      <Protect
+        plan="pro"
+        fallback={<UpgradePrompt message="Upgrade to Pro to access unlimited decks!" />}
+      >
+        <UnlimitedDecksUI />
+      </Protect>
+
+      {/* Protect features specifically */}
+      <Protect
+        feature="ai_flashcard_generation"
+        fallback={<ProFeatureLockedMessage feature="AI Flashcard Generation" />}
+      >
+        <AIGenerationButton />
+      </Protect>
+
+      {/* Show different content for free users */}
+      <Protect
+        feature="3_deck_limit"
+        fallback={null}
+      >
+        <DeckLimitWarning />
+      </Protect>
+    </>
+  );
+}
+```
+
+## 🚨 Mandatory Implementation Patterns
+
+### 1. Deck Limit Enforcement
+
+**ALWAYS** check deck limits before allowing deck creation:
+
+```typescript
+// In server actions or API routes
+import { auth } from '@clerk/nextjs/server';
+import { db } from '@/lib/db';
+import { decksTable } from '@/db/schema';
+
+export async function createDeck(title: string, description: string) {
+  const { has, userId } = await auth();
+  
+  if (!userId) {
+    throw new Error('User not authenticated');
+  }
+
+  // Check if user has unlimited decks
+  const hasUnlimitedDecks = has({ feature: 'unlimited_decks' });
+  
+  if (!hasUnlimitedDecks) {
+    // Count existing decks for free users
+    const existingDecks = await db
+      .select({ count: count() })
+      .from(decksTable)
+      .where(eq(decksTable.userId, userId));
+
+    if (existingDecks[0].count >= 3) {
+      throw new Error('Free users are limited to 3 decks. Upgrade to Pro for unlimited decks.');
+    }
+  }
+
+  // Proceed with deck creation
+  const [newDeck] = await db.insert(decksTable).values({
+    title,
+    description,
+    userId,
+  }).returning();
+
+  return newDeck;
+}
+```
+
+### 2. AI Feature Gating
+
+**ALWAYS** protect AI features behind proper checks:
+
+```typescript
+// In AI-related server actions
+export async function generateFlashcards(deckId: number, topic: string) {
+  const { has, userId } = await auth();
+  
+  if (!userId) {
+    throw new Error('User not authenticated');
+  }
+
+  const hasAIFeature = has({ feature: 'ai_flashcard_generation' });
+  
+  if (!hasAIFeature) {
+    throw new Error('AI flashcard generation is only available for Pro users. Please upgrade your plan.');
+  }
+
+  // Proceed with AI generation
+  // ... AI logic here
+}
+```
+
+### 3. Pricing Page Implementation
+
+**ALWAYS** create a dedicated pricing page using `<PricingTable>`:
+
+```typescript
+// app/pricing/page.tsx
+import { PricingTable } from '@clerk/nextjs';
+
+export default function PricingPage() {
+  return (
+    <div className="container mx-auto max-w-6xl px-4 py-8">
+      <div className="text-center mb-8">
+        <h1 className="text-4xl font-bold mb-4">Choose Your Plan</h1>
+        <p className="text-lg text-muted-foreground">
+          Unlock the full potential of your vocabulary learning
+        </p>
+      </div>
+      
+      <PricingTable />
+      
+      <div className="mt-12 text-center">
+        <p className="text-sm text-muted-foreground">
+          All plans include access to your vocabulary decks and study sessions
+        </p>
+      </div>
+    </div>
+  );
+}
+```
+
+## 🎯 Feature-Specific Implementation Guidelines
+
+### Dashboard Deck Limit Display
+
+Show deck usage and limits on the dashboard:
+
+```typescript
+export default async function DashboardPage() {
+  const { has, userId } = await auth();
+  
+  if (!userId) redirect('/');
+
+  const hasUnlimitedDecks = has({ feature: 'unlimited_decks' });
+  const userDecks = await getUserDecks(userId);
+  
+  return (
+    <div>
+      <Protect
+        feature="3_deck_limit"
+        fallback={
+          <div className="flex items-center gap-2 text-sm text-green-600">
+            <Badge variant="secondary">Pro</Badge>
+            Unlimited decks
+          </div>
+        }
+      >
+        <div className="flex items-center gap-2 text-sm">
+          <Badge variant={userDecks.length >= 3 ? "destructive" : "secondary"}>
+            {userDecks.length}/3 decks
+          </Badge>
+          {userDecks.length >= 3 && (
+            <Button size="sm" variant="outline" asChild>
+              <Link href="/pricing">Upgrade for unlimited decks</Link>
+            </Button>
+          )}
+        </div>
+      </Protect>
+    </div>
+  );
+}
+```
+
+### AI Generation Button
+
+Only show AI features for Pro users:
+
+```typescript
+export function CreateCardDialog({ deckId }: { deckId: number }) {
+  return (
+    <Dialog>
+      <DialogContent>
+        <div className="space-y-4">
+          <ManualCardCreation deckId={deckId} />
+          
+          <Separator />
+          
+          <Protect
+            feature="ai_flashcard_generation"
+            fallback={
+              <div className="text-center p-4 border border-dashed rounded-lg">
+                <p className="text-sm text-muted-foreground mb-2">
+                  AI Flashcard Generation
+                </p>
+                <Button size="sm" variant="outline" asChild>
+                  <Link href="/pricing">
+                    Upgrade to Pro to unlock AI features
+                  </Link>
+                </Button>
+              </div>
+            }
+          >
+            <AICardGeneration deckId={deckId} />
+          </Protect>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+```
+
+## ⚠️ Important Notes
+
+### Development vs Production
+
+- **Development**: Uses Clerk's shared test Stripe account
+- **Production**: Requires your own Stripe account setup
+- **Always test billing flows in development before production deployment**
+
+### Error Handling
+
+Always provide user-friendly error messages for billing-related restrictions:
+
+```typescript
+// Good error messages
+"Free users are limited to 3 decks. Upgrade to Pro for unlimited decks."
+"AI flashcard generation is only available for Pro users."
+"This feature requires a Pro subscription."
+
+// Bad error messages  
+"Access denied"
+"Insufficient permissions"
+"Feature not available"
+```
+
+### Component Patterns
+
+- Use `<Protect>` for conditional UI rendering
+- Use `has()` for server-side logic and redirects
+- Always provide upgrade prompts in fallbacks
+- Show clear plan benefits and limitations
+
+## 🔍 Testing Checklist
+
+Before deploying billing features:
+- [ ] Test with both free and pro user accounts
+- [ ] Verify deck limits are enforced correctly
+- [ ] Ensure AI features are properly gated
+- [ ] Test upgrade flow from pricing page
+- [ ] Verify proper error messages for restricted features
+- [ ] Test billing components appear correctly
+- [ ] Ensure fallback content is user-friendly
+
+## 🚫 Forbidden Practices
+
+- ❌ **Never** implement billing checks client-side only
+- ❌ **Never** trust client-side plan/feature state for critical operations
+- ❌ **Never** bypass feature checks in server actions
+- ❌ **Never** show billing errors without upgrade paths
+- ❌ **Never** create custom billing UI instead of using Clerk components
+
+Remember: **All billing restrictions must be enforced server-side** with user-friendly client-side UI that guides users toward upgrading their plan.
