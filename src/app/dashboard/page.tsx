@@ -1,4 +1,5 @@
 import { auth } from "@clerk/nextjs/server";
+import { Protect } from "@clerk/nextjs";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getDecksWithCardCounts } from "@/db/queries";
@@ -6,19 +7,27 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CreateDeckDialog } from "@/components/create-deck-dialog";
-import { Plus, BookOpen, Clock, Calendar } from "lucide-react";
+import { Plus, BookOpen, Clock, Calendar, Crown } from "lucide-react";
 
 export default async function DashboardPage() {
-  // Verify authentication and get user ID
-  const { userId } = await auth();
+  // Verify authentication and get user ID with billing info
+  const { userId, has } = await auth();
   
   if (!userId) {
     redirect("/");
   }
 
+  // Check user's plan and features
+  const hasUnlimitedDecks = has({ feature: 'unlimited_decks' });
+  const hasThreeDeckLimit = has({ feature: '3_deck_limit' });
+
   // Fetch user's decks with card counts
   const userDecks = await getDecksWithCardCounts(userId);
+
+  // Calculate if user is at deck limit
+  const isAtDeckLimit = hasThreeDeckLimit && userDecks.length >= 3;
 
 
   return (
@@ -31,13 +40,48 @@ export default async function DashboardPage() {
             Manage your vocabulary decks and track your learning progress
           </p>
         </div>
-        <div className="flex justify-start">
-          <CreateDeckDialog>
-            <Button size="sm" variant="outline" className="flex items-center gap-2 text-xs h-8 px-3">
-              <Plus className="h-3 w-3" />
-              Create New Deck
+        
+        {/* Deck Limit Display */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Protect
+              feature="3_deck_limit"
+              fallback={
+                <div className="flex items-center gap-2 text-sm">
+                  <Badge variant="secondary" className="flex items-center gap-1">
+                    <Crown className="h-3 w-3" />
+                    Pro - Unlimited decks
+                  </Badge>
+                </div>
+              }
+            >
+              <div className="flex items-center gap-2 text-sm">
+                <Badge variant={userDecks.length >= 3 ? "outline" : "secondary"}>
+                  {userDecks.length}/3 decks
+                </Badge>
+                {userDecks.length >= 3 && (
+                  <span className="text-muted-foreground font-medium">Limit reached</span>
+                )}
+              </div>
+            </Protect>
+          </div>
+
+          {/* Create Deck Button */}
+          {isAtDeckLimit ? (
+            <Button size="sm" variant="outline" asChild>
+              <Link href="/pricing" className="flex items-center gap-2 text-xs h-8 px-3">
+                <Crown className="h-3 w-3" />
+                Upgrade for Unlimited Decks
+              </Link>
             </Button>
-          </CreateDeckDialog>
+          ) : (
+            <CreateDeckDialog>
+              <Button size="sm" variant="outline" className="flex items-center gap-2 text-xs h-8 px-3">
+                <Plus className="h-3 w-3" />
+                Create New Deck
+              </Button>
+            </CreateDeckDialog>
+          )}
         </div>
       </div>
       
@@ -83,36 +127,69 @@ export default async function DashboardPage() {
             </div>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {userDecks.map((deck) => (
-              <Link key={deck.id} href={`/decks/${deck.id}`} className="block group">
-                <Card className="h-full transition-all duration-200 group-hover:shadow-lg group-hover:border-primary/20 cursor-pointer">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <CardTitle className="line-clamp-1 group-hover:text-primary transition-colors">
-                        {deck.title}
-                      </CardTitle>
-                      <Badge variant="outline" className="text-xs shrink-0">
-                        {deck.cardCount} cards
-                      </Badge>
-                    </div>
-                    <CardDescription className="line-clamp-2">
-                      {deck.description || "No description provided"}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="pt-0">
-                    <Separator className="mb-3" />
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <Calendar className="h-3 w-3" />
-                        <span>Updated {deck.updatedAt.toLocaleDateString()}</span>
+          <>
+            {/* Upgrade Prompt for Free Users Near Limit */}
+            <Protect
+              feature="3_deck_limit"
+              fallback={null}
+            >
+              {userDecks.length >= 2 && (
+                <Alert className="border-orange-200 bg-gradient-to-r from-orange-50 to-amber-50">
+                  <Crown className="h-4 w-4 text-orange-600" />
+                  <AlertDescription className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <div className="font-semibold text-orange-900">
+                        {userDecks.length === 2 ? "Almost at your limit!" : "Deck limit reached"}
+                      </div>
+                      <div className="text-sm text-orange-700">
+                        {userDecks.length === 2 
+                          ? "You can create 1 more deck. Upgrade to Pro for unlimited decks."
+                          : "You've reached your 3-deck limit. Upgrade to Pro for unlimited decks."
+                        }
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
+                    <Button variant="outline" size="sm" asChild className="border-orange-300 text-orange-900 hover:bg-orange-100 ml-4">
+                      <Link href="/pricing" className="flex items-center gap-2">
+                        <Crown className="h-4 w-4" />
+                        Upgrade to Pro
+                      </Link>
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
+            </Protect>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {userDecks.map((deck) => (
+                <Link key={deck.id} href={`/decks/${deck.id}`} className="block group">
+                  <Card className="h-full transition-all duration-200 group-hover:shadow-lg group-hover:border-primary/20 cursor-pointer">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <CardTitle className="line-clamp-1 group-hover:text-primary transition-colors">
+                          {deck.title}
+                        </CardTitle>
+                        <Badge variant="outline" className="text-xs shrink-0">
+                          {deck.cardCount} cards
+                        </Badge>
+                      </div>
+                      <CardDescription className="line-clamp-2">
+                        {deck.description || "No description provided"}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      <Separator className="mb-3" />
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                        <div className="flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          <span>Updated {deck.updatedAt.toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+          </>
         )}
       </div>
     </div>

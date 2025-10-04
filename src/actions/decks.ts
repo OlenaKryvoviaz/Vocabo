@@ -3,7 +3,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createDeck, updateDeck, deleteDeck } from "@/db/queries/decks";
+import { createDeck, updateDeck, deleteDeck, getDecksByUserId } from "@/db/queries/decks";
 import { z } from "zod";
 
 // Schema for validating deck creation input
@@ -56,11 +56,36 @@ export async function createDeckAction(
   prevState: CreateDeckFormState,
   formData: FormData
 ): Promise<CreateDeckFormState> {
-  // Verify authentication
-  const { userId } = await auth();
+  // Verify authentication and get billing info
+  const { userId, has } = await auth();
   
   if (!userId) {
     redirect("/");
+  }
+
+  // Check deck limits for free users
+  const hasUnlimitedDecks = has({ feature: 'unlimited_decks' });
+  
+  if (!hasUnlimitedDecks) {
+    try {
+      // Count existing decks for free users
+      const existingDecks = await getDecksByUserId(userId);
+      
+      if (existingDecks.length >= 3) {
+        return {
+          errors: {
+            _form: ["Free users are limited to 3 decks. Upgrade to Pro for unlimited decks."],
+          },
+        };
+      }
+    } catch (error) {
+      console.error("Error checking deck count:", error);
+      return {
+        errors: {
+          _form: ["Failed to verify deck limit. Please try again."],
+        },
+      };
+    }
   }
 
   // Validate form data
