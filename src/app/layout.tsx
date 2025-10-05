@@ -12,6 +12,7 @@ import { dark } from "@clerk/themes";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger, DialogTitle, DialogHeader } from "@/components/ui/dialog";
 import { AuthRedirect } from "@/components/auth-redirect";
+import { Toaster } from "sonner";
 import "./globals.css";
 
 const poppins = Poppins({
@@ -75,6 +76,7 @@ export default function RootLayout({
             </div>
           </header>
           {children}
+          <Toaster position="top-center" richColors />
         </body>
       </html>
     </ClerkProvider>

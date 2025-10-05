@@ -134,21 +134,21 @@ export default async function DashboardPage() {
               fallback={null}
             >
               {userDecks.length >= 2 && (
-                <Alert className="border-orange-200 bg-gradient-to-r from-orange-50 to-amber-50">
-                  <Crown className="h-4 w-4 text-orange-600" />
+                <Alert>
+                  <Crown className="h-4 w-4" />
                   <AlertDescription className="flex items-center justify-between">
                     <div className="space-y-1">
-                      <div className="font-semibold text-orange-900">
+                      <div className="font-semibold">
                         {userDecks.length === 2 ? "Almost at your limit!" : "Deck limit reached"}
                       </div>
-                      <div className="text-sm text-orange-700">
+                      <div className="text-sm">
                         {userDecks.length === 2 
                           ? "You can create 1 more deck. Upgrade to Pro for unlimited decks."
                           : "You've reached your 3-deck limit. Upgrade to Pro for unlimited decks."
                         }
                       </div>
                     </div>
-                    <Button variant="outline" size="sm" asChild className="border-orange-300 text-orange-900 hover:bg-orange-100 ml-4">
+                    <Button variant="outline" size="sm" asChild className="ml-4">
                       <Link href="/pricing" className="flex items-center gap-2">
                         <Crown className="h-4 w-4" />
                         Upgrade to Pro

@@ -5,6 +5,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createCard, updateCard, deleteCard } from "@/db/queries/cards";
 import { z } from "zod";
+import { generateObject } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { db } from "@/lib/db";
+import { cardsTable } from "@/db/schema";
+import { eq, desc } from "drizzle-orm";
 
 // Schema for validating card input
 const createCardSchema = z.object({
@@ -235,5 +240,134 @@ export async function deleteCardAction(
         _form: ["Failed to delete card. Please try again."],
       },
     };
+  }
+}
+
+// Schema for AI flashcard generation
+const flashcardSchema = z.object({
+  front: z.string().min(1, "Front of card cannot be empty"),
+  back: z.string().min(1, "Back of card cannot be empty"),
+});
+
+const flashcardsResponseSchema = z.object({
+  flashcards: z.array(flashcardSchema).min(1).max(25), // Allow a bit more flexibility
+  topic: z.string(),
+  totalCount: z.number(),
+});
+
+export async function generateAIFlashcards(
+  deckId: number,
+  deckTitle: string,
+  deckDescription: string | null,
+  count: number = 20
+) {
+  // 🔐 CRITICAL: Always verify authentication and Pro subscription
+  const { has, userId } = await auth();
+  
+  if (!userId) {
+    throw new Error('User not authenticated');
+  }
+
+  // 🔐 CRITICAL: Check for AI feature access (Pro plan required)
+  const hasAIFeature = has({ feature: 'ai_flashcard_generation' });
+  if (!hasAIFeature) {
+    throw new Error('AI flashcard generation is only available for Pro users. Please upgrade your plan.');
+  }
+
+  try {
+    // Create a comprehensive topic from deck title and description
+    const topic = deckDescription 
+      ? `${deckTitle} - ${deckDescription}`
+      : deckTitle;
+
+    // Detect if this is a language learning deck
+    const isLanguageLearning = /\b(to\s+\w+|vocabulary|translation|language|learn\s+\w+|spanish|french|german|italian|portuguese|chinese|japanese|korean|arabic|russian|indonesian|dutch|swedish|norwegian|finnish)\b/i.test(topic);
+
+    // Generate structured flashcards using Vercel AI
+    const { object } = await generateObject({
+      model: openai('gpt-4o-mini'), // Use gpt-4o-mini which supports structured output
+      schema: flashcardsResponseSchema,
+      prompt: isLanguageLearning 
+        ? `Generate exactly ${count} language learning flashcards for: "${topic}".
+      
+      LANGUAGE LEARNING FORMAT:
+      - Front: Simple word, phrase, or sentence in the source language
+      - Back: Direct translation only (no explanations or descriptions)
+      - Focus on practical, commonly used words and phrases
+      - Vary between single words, common phrases, and useful sentences
+      - Make translations accurate and concise
+      
+      Example for English to Spanish:
+      Front: "Hello"
+      Back: "Hola"
+      
+      Front: "How are you?"
+      Back: "¿Cómo estás?"
+      
+      IMPORTANT: Generate exactly ${count} flashcards with simple, direct translations.`
+        
+        : `Generate exactly ${count} flashcards for the topic: "${topic}".
+      
+      Requirements:
+      - Generate EXACTLY ${count} flashcards, no more, no less
+      - Focus on educational content relevant to the topic
+      - Each flashcard should have a clear question/term/concept on the front
+      - Each flashcard should have a comprehensive answer/definition/explanation on the back
+      - Make flashcards educational and practical for learning
+      - Vary the types of content (definitions, examples, explanations, facts, etc.)
+      - Ensure each card is unique and builds upon the topic theme
+      - Keep content appropriate for learners
+      - Make sure the front and back are clearly different (front = question/term, back = answer/explanation)
+      
+      IMPORTANT: Return exactly ${count} flashcards in the flashcards array.`,
+    });
+
+    // 🔍 Validate the generated content
+    if (!object.flashcards || object.flashcards.length === 0) {
+      throw new Error('Failed to generate flashcards');
+    }
+
+    // 📝 Get the current highest order for proper card ordering
+    const existingCards = await db
+      .select({ order: cardsTable.order })
+      .from(cardsTable)
+      .where(eq(cardsTable.deckId, deckId))
+      .orderBy(desc(cardsTable.order))
+      .limit(1);
+
+    const startingOrder = existingCards.length > 0 ? (existingCards[0].order ?? 0) + 1 : 0;
+
+    // 💾 Insert generated flashcards into database
+    const cardsToInsert = object.flashcards.map((card, index) => ({
+      deckId,
+      front: card.front,
+      back: card.back,
+      order: startingOrder + index,
+    }));
+
+    const insertedCards = await db
+      .insert(cardsTable)
+      .values(cardsToInsert)
+      .returning();
+
+    // Revalidate the deck page to show new cards
+    revalidatePath(`/decks/${deckId}`);
+
+    return {
+      success: true,
+      cards: insertedCards,
+      generatedTopic: object.topic,
+      totalGenerated: object.totalCount,
+    };
+
+  } catch (error) {
+    console.error('AI flashcard generation error:', error);
+    
+    // Provide user-friendly error messages
+    if (error instanceof Error) {
+      throw new Error(`Failed to generate flashcards: ${error.message}`);
+    }
+    
+    throw new Error('An unexpected error occurred while generating flashcards');
   }
 }
