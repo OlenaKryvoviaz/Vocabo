@@ -1,0 +1,333 @@
+---
+alwaysApply: true
+---
+# Vercel AI Integration for Flashcard Generation
+
+This project uses the **Vercel AI SDK** with OpenAI for AI-powered flashcard generation. This feature is gated behind the Pro subscription plan.
+
+## Required Dependencies
+
+```bash
+npm install ai zod
+```
+
+## Required Imports
+
+```typescript
+import { generateObject } from 'ai';
+import { openai } from 'ai/openai';
+import { z } from 'zod';
+import { auth } from '@clerk/nextjs/server';
+```
+
+## Flashcard Schema Definition
+
+**ALWAYS** use this Zod schema for flashcard generation:
+
+```typescript
+// Define the flashcard schema
+const flashcardSchema = z.object({
+  front: z.string().min(1, "Front of card cannot be empty"),
+  back: z.string().min(1, "Back of card cannot be empty"),
+});
+
+// Define the response schema for multiple flashcards
+const flashcardsResponseSchema = z.object({
+  flashcards: z.array(flashcardSchema).min(1).max(20), // Limit to reasonable number
+  topic: z.string(),
+  totalCount: z.number(),
+});
+```
+
+## AI Flashcard Generation Pattern
+
+**MANDATORY** server action pattern for AI flashcard generation:
+
+```typescript
+'use server';
+
+import { generateObject } from 'ai';
+import { openai } from 'ai/openai';
+import { z } from 'zod';
+import { auth } from '@clerk/nextjs/server';
+import { db } from '@/lib/db';
+import { cardsTable } from '@/db/schema';
+
+// Zod schemas (as defined above)
+const flashcardSchema = z.object({
+  front: z.string().min(1, "Front of card cannot be empty"),
+  back: z.string().min(1, "Back of card cannot be empty"),
+});
+
+const flashcardsResponseSchema = z.object({
+  flashcards: z.array(flashcardSchema).min(1).max(20),
+  topic: z.string(),
+  totalCount: z.number(),
+});
+
+export async function generateAIFlashcards(
+  deckId: number,
+  topic: string,
+  count: number = 5,
+  difficulty: 'beginner' | 'intermediate' | 'advanced' = 'intermediate'
+) {
+  // 🔐 CRITICAL: Always verify authentication and Pro subscription
+  const { has, userId } = await auth();
+  
+  if (!userId) {
+    throw new Error('User not authenticated');
+  }
+
+  // 🔐 CRITICAL: Check for AI feature access (Pro plan required)
+  const hasAIFeature = has({ feature: 'ai_flashcard_generation' });
+  if (!hasAIFeature) {
+    throw new Error('AI flashcard generation is only available for Pro users. Please upgrade your plan.');
+  }
+
+  try {
+    // Generate structured flashcards using Vercel AI
+    const { object } = await generateObject({
+      model: openai('gpt-4'), // Use appropriate model
+      schema: flashcardsResponseSchema,
+      prompt: `Generate ${count} vocabulary flashcards for the topic: "${topic}".
+      
+      Requirements:
+      - Difficulty level: ${difficulty}
+      - Each flashcard should have a clear question/term on the front
+      - Each flashcard should have a comprehensive answer/definition on the back
+      - Focus on practical vocabulary that would be useful for language learners
+      - Vary the types of content (definitions, examples, usage, etc.)
+      - Make sure each card is unique and educational
+      
+      Return exactly ${count} flashcards with front and back content.`,
+    });
+
+    // 🔍 Validate the generated content
+    if (!object.flashcards || object.flashcards.length === 0) {
+      throw new Error('Failed to generate flashcards');
+    }
+
+    // 📝 Get the current highest order for proper card ordering
+    const existingCards = await db
+      .select({ order: cardsTable.order })
+      .from(cardsTable)
+      .where(eq(cardsTable.deckId, deckId))
+      .orderBy(desc(cardsTable.order))
+      .limit(1);
+
+    const startingOrder = existingCards.length > 0 ? existingCards[0].order + 1 : 0;
+
+    // 💾 Insert generated flashcards into database
+    const cardsToInsert = object.flashcards.map((card, index) => ({
+      deckId,
+      front: card.front,
+      back: card.back,
+      order: startingOrder + index,
+    }));
+
+    const insertedCards = await db
+      .insert(cardsTable)
+      .values(cardsToInsert)
+      .returning();
+
+    return {
+      success: true,
+      cards: insertedCards,
+      generatedTopic: object.topic,
+      totalGenerated: object.totalCount,
+    };
+
+  } catch (error) {
+    console.error('AI flashcard generation error:', error);
+    
+    // Provide user-friendly error messages
+    if (error instanceof Error) {
+      throw new Error(`Failed to generate flashcards: ${error.message}`);
+    }
+    
+    throw new Error('An unexpected error occurred while generating flashcards');
+  }
+}
+```
+
+## Client-Side Integration Pattern
+
+**ALWAYS** use this pattern for client-side AI generation triggers:
+
+```typescript
+'use client';
+
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+
+interface AIGenerationFormProps {
+  deckId: number;
+  onCardsGenerated: () => void;
+}
+
+export function AIGenerationForm({ deckId, onCardsGenerated }: AIGenerationFormProps) {
+  const [topic, setTopic] = useState('');
+  const [count, setCount] = useState('5');
+  const [difficulty, setDifficulty] = useState<'beginner' | 'intermediate' | 'advanced'>('intermediate');
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const handleGenerate = async () => {
+    if (!topic.trim()) {
+      toast.error('Please enter a topic for flashcard generation');
+      return;
+    }
+
+    setIsGenerating(true);
+    
+    try {
+      const result = await generateAIFlashcards(
+        deckId,
+        topic.trim(),
+        parseInt(count),
+        difficulty
+      );
+
+      if (result.success) {
+        toast.success(`Generated ${result.totalGenerated} flashcards successfully!`);
+        onCardsGenerated();
+        setTopic(''); // Reset form
+      }
+    } catch (error) {
+      console.error('Generation failed:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to generate flashcards');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <Label htmlFor="topic">Topic</Label>
+        <Input
+          id="topic"
+          value={topic}
+          onChange={(e) => setTopic(e.target.value)}
+          placeholder="e.g. Business English, Travel Vocabulary, etc."
+          disabled={isGenerating}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="count">Number of Cards</Label>
+          <Select value={count} onValueChange={setCount} disabled={isGenerating}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="3">3 cards</SelectItem>
+              <SelectItem value="5">5 cards</SelectItem>
+              <SelectItem value="10">10 cards</SelectItem>
+              <SelectItem value="15">15 cards</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div>
+          <Label htmlFor="difficulty">Difficulty</Label>
+          <Select 
+            value={difficulty} 
+            onValueChange={(value: 'beginner' | 'intermediate' | 'advanced') => setDifficulty(value)}
+            disabled={isGenerating}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="beginner">Beginner</SelectItem>
+              <SelectItem value="intermediate">Intermediate</SelectItem>
+              <SelectItem value="advanced">Advanced</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <Button 
+        onClick={handleGenerate} 
+        disabled={isGenerating || !topic.trim()}
+        className="w-full"
+      >
+        {isGenerating ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Generating flashcards...
+          </>
+        ) : (
+          'Generate AI Flashcards'
+        )}
+      </Button>
+    </div>
+  );
+}
+```
+
+## Environment Variables
+
+**REQUIRED** environment variables in `.env.local`:
+
+```bash
+# OpenAI API Key for Vercel AI
+OPENAI_API_KEY=your_openai_api_key_here
+```
+
+## Error Handling Guidelines
+
+**ALWAYS** implement comprehensive error handling:
+
+1. **Authentication Errors**: Return clear messages about authentication requirements
+2. **Subscription Errors**: Guide users to upgrade to Pro plan
+3. **API Errors**: Handle OpenAI API failures gracefully
+4. **Validation Errors**: Validate Zod schema results
+5. **Database Errors**: Handle database insertion failures
+
+## Rate Limiting Considerations
+
+For production applications, consider implementing:
+
+1. **User-based rate limiting** for AI generation requests
+2. **Daily/monthly limits** for free vs Pro users
+3. **Request throttling** to prevent API abuse
+4. **Cost monitoring** for OpenAI API usage
+
+## Testing Patterns
+
+**ALWAYS** test AI features with:
+
+1. **Different user subscription levels** (free vs Pro)
+2. **Various topic inputs** (valid and invalid)
+3. **Network failure scenarios** 
+4. **API response validation**
+5. **Database insertion edge cases**
+
+## 🚫 Forbidden Practices
+
+- ❌ **Never** call AI generation without authentication checks
+- ❌ **Never** bypass Pro subscription validation for AI features
+- ❌ **Never** expose OpenAI API keys client-side
+- ❌ **Never** generate unlimited cards without reasonable limits
+- ❌ **Never** skip error handling for API calls
+- ❌ **Never** forget to validate AI-generated content before database insertion
+
+## 🔍 Security Checklist
+
+Before deploying AI features:
+- [ ] Authentication verification implemented
+- [ ] Pro subscription gating in place
+- [ ] Input validation for all user-provided data
+- [ ] Rate limiting configured
+- [ ] Error messages don't expose sensitive information
+- [ ] API keys properly secured
+- [ ] Generated content validated before database insertion
+
+Remember: **AI features are premium functionality** that must be properly gated behind Pro subscriptions and implemented with robust error handling and security measures.
