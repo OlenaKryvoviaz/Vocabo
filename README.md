@@ -4,6 +4,8 @@
 
 A freemium vocabulary learning app that combines AI-powered content generation with subscription monetization. Built to demonstrate modern product strategy, technical architecture, and user experience design.
 
+Check it here ->[https://vocabo-three.vercel.app/](https://vocabo-three.vercel.app/)
+
 ## 🎯 Product Overview
 
 **Problem**: Traditional flashcard apps lack intelligent content creation and scalable monetization models.
