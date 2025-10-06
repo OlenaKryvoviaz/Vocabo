@@ -1,12 +1,12 @@
-import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import { getOptionalAuth } from "@/lib/auth-utils";
 import { SignIn, SignUp } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger, DialogTitle, DialogHeader } from "@/components/ui/dialog";
 import { AuthRedirect } from "@/components/auth-redirect";
 
 export default async function HomePage() {
-  const { userId } = await auth();
+  const userId = await getOptionalAuth();
   
   // If user is already signed in, redirect to dashboard
   if (userId) {

@@ -1,8 +1,6 @@
-import { auth } from "@clerk/nextjs/server";
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getDeckIfOwner } from "@/db/queries/decks";
+import { requireAuth, getDeckIfOwner, Validators } from "@/lib/auth-utils";
 import { getCardsByDeckId } from "@/db/queries/cards";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,17 +21,15 @@ interface DeckPageProps {
 }
 
 export default async function DeckPage({ params }: DeckPageProps) {
-  // Verify authentication and get user ID with billing features
-  const { userId } = await auth();
-  
-  if (!userId) {
-    redirect("/");
-  }
+  // Verify authentication and get user ID
+  const userId = await requireAuth();
 
-  // Parse deck ID
+  // Parse and validate deck ID
   const resolvedParams = await params;
-  const deckId = parseInt(resolvedParams.deckId);
-  if (isNaN(deckId)) {
+  let deckId: number;
+  try {
+    deckId = Validators.deckId(resolvedParams.deckId);
+  } catch {
     notFound();
   }
 

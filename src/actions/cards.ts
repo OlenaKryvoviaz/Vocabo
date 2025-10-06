@@ -1,8 +1,7 @@
 "use server";
 
-import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { requireAuthWithBilling, Validators } from "@/lib/auth-utils";
 import { createCard, updateCard, deleteCard } from "@/db/queries/cards";
 import { z } from "zod";
 import { generateObject } from 'ai';
@@ -33,11 +32,7 @@ export async function createCardAction(
   formData: FormData
 ): Promise<CreateCardFormState> {
   // Verify authentication
-  const { userId } = await auth();
-  
-  if (!userId) {
-    redirect("/");
-  }
+  const { userId } = await requireAuthWithBilling();
 
   // Validate form data
   const validatedFields = createCardSchema.safeParse({
@@ -55,10 +50,14 @@ export async function createCardAction(
   const { front, back, deckId } = validatedFields.data;
 
   try {
+    // Validate card content using utilities
+    const validatedFront = Validators.cardContent(front);
+    const validatedBack = Validators.cardContent(back);
+    
     // Create the new card
     await createCard(deckId, userId, {
-      front: front.trim(),
-      back: back.trim(),
+      front: validatedFront,
+      back: validatedBack,
       order: 0, // The database function will handle proper ordering
     });
 
@@ -114,11 +113,7 @@ export async function updateCardAction(
   formData: FormData
 ): Promise<UpdateCardFormState> {
   // Verify authentication
-  const { userId } = await auth();
-  
-  if (!userId) {
-    redirect("/");
-  }
+  const { userId } = await requireAuthWithBilling();
 
   // Validate form data
   const validatedFields = updateCardSchema.safeParse({
@@ -137,10 +132,14 @@ export async function updateCardAction(
   const { front, back, cardId, deckId } = validatedFields.data;
 
   try {
+    // Validate card content using utilities
+    const validatedFront = Validators.cardContent(front);
+    const validatedBack = Validators.cardContent(back);
+    
     // Update the card with ownership verification
     await updateCard(cardId, userId, {
-      front: front.trim(),
-      back: back.trim(),
+      front: validatedFront,
+      back: validatedBack,
     });
 
     // Revalidate the deck page to show the updated card
@@ -191,11 +190,7 @@ export async function deleteCardAction(
   formData: FormData
 ): Promise<DeleteCardFormState> {
   // Verify authentication
-  const { userId } = await auth();
-  
-  if (!userId) {
-    redirect("/");
-  }
+  const { userId } = await requireAuthWithBilling();
 
   // Validate form data
   const validatedFields = deleteCardSchema.safeParse({
@@ -262,11 +257,7 @@ export async function generateAIFlashcards(
   count: number = 20
 ) {
   // 🔐 CRITICAL: Always verify authentication and Pro subscription
-  const { has, userId } = await auth();
-  
-  if (!userId) {
-    throw new Error('User not authenticated');
-  }
+  const { has } = await requireAuthWithBilling();
 
   // 🔐 CRITICAL: Check for AI feature access (Pro plan required)
   const hasAIFeature = has({ feature: 'ai_flashcard_generation' });

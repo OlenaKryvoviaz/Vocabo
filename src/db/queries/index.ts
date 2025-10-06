@@ -8,11 +8,9 @@ export {
   getDecksByUserId,
   getDecksWithCardCounts,
   getDeckById,
-  getDeckIfOwner,
   createDeck,
   updateDeck,
   deleteDeck,
-  verifyDeckOwnership,
   
   // Deck types
   type Deck,
@@ -20,6 +18,12 @@ export {
   type InsertDeck,
   type UpdateDeck,
 } from "./decks";
+
+// Re-export ownership verification utilities from auth-utils
+export {
+  getDeckIfOwner,
+  verifyDeckOwnership,
+} from "@/lib/auth-utils";
 
 export {
   // Card queries

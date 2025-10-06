@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -61,21 +61,21 @@ export function StudySession({ deck, cards }: StudySessionProps) {
     }, 500);
   };
 
-  const handleNext = () => {
+  const handleNext = useCallback(() => {
     if (currentCardIndex < totalCardsToStudy - 1) {
       setCurrentCardIndex(prev => prev + 1);
       setShowAnswer(false);
       setHasAnswered(false);
     }
-  };
+  }, [currentCardIndex, totalCardsToStudy]);
 
-  const handlePrevious = () => {
+  const handlePrevious = useCallback(() => {
     if (currentCardIndex > 0) {
       setCurrentCardIndex(prev => prev - 1);
       setShowAnswer(false);
       setHasAnswered(false);
     }
-  };
+  }, [currentCardIndex]);
 
   const handleFlipCard = () => {
     setShowAnswer(prev => !prev);
@@ -127,7 +127,7 @@ export function StudySession({ deck, cards }: StudySessionProps) {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [currentCardIndex, totalCardsToStudy, showAnswer, hasAnswered]);
+  }, [currentCardIndex, totalCardsToStudy, showAnswer, hasAnswered, handleNext, handlePrevious]);
 
   const isLastCard = currentCardIndex === totalCardsToStudy - 1;
   const hasStudiedCurrentCard = studiedCards.has(currentCard.id);

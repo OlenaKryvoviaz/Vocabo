@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { useActionState } from "react";
-import { useRouter } from "next/navigation";
 import { deleteDeckAction, type DeleteDeckFormState } from "@/actions/decks";
 import {
   Dialog,
@@ -32,7 +31,6 @@ export function DeleteDeckDialog({
 }: DeleteDeckDialogProps) {
   const [open, setOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const router = useRouter();
   
   const initialState: DeleteDeckFormState = {};
   const [state, formAction] = useActionState(deleteDeckAction, initialState);

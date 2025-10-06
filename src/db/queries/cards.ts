@@ -1,8 +1,8 @@
 import { db } from "@/lib/db";
 import { cardsTable } from "@/db/schema";
-import { eq, and, asc, desc } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import type { InferSelectModel, InferInsertModel } from "drizzle-orm";
-import { getDeckIfOwner } from "./decks";
+import { getDeckIfOwner } from "@/lib/auth-utils";
 
 // Type definitions
 export type Card = InferSelectModel<typeof cardsTable>;

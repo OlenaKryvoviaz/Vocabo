@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { decksTable, cardsTable } from "@/db/schema";
 import { eq, and, desc, count } from "drizzle-orm";
 import type { InferSelectModel, InferInsertModel } from "drizzle-orm";
+import { getDeckIfOwner } from "@/lib/auth-utils";
 
 // Type definitions
 export type Deck = InferSelectModel<typeof decksTable>;
@@ -69,23 +70,7 @@ export async function getDeckById(deckId: number, userId: string): Promise<Deck 
   }
 }
 
-/**
- * Get deck if user owns it, otherwise throw error
- */
-export async function getDeckIfOwner(deckId: number, userId: string): Promise<Deck> {
-  try {
-    const deck = await getDeckById(deckId, userId);
-    
-    if (!deck) {
-      throw new Error("Deck not found or access denied");
-    }
-    
-    return deck;
-  } catch (error) {
-    console.error("Error verifying deck ownership:", error);
-    throw error;
-  }
-}
+// getDeckIfOwner moved to @/lib/auth-utils for centralized security utilities
 
 /**
  * Create a new deck for a user
@@ -161,15 +146,4 @@ export async function deleteDeck(deckId: number, userId: string): Promise<Deck> 
   }
 }
 
-/**
- * Verify that a user owns a specific deck
- */
-export async function verifyDeckOwnership(deckId: number, userId: string): Promise<boolean> {
-  try {
-    const deck = await getDeckById(deckId, userId);
-    return deck !== null;
-  } catch (error) {
-    console.error("Error verifying deck ownership:", error);
-    return false;
-  }
-}
+// verifyDeckOwnership moved to @/lib/auth-utils for centralized security utilities

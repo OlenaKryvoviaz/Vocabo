@@ -1,7 +1,6 @@
-import { auth } from "@clerk/nextjs/server";
 import { Protect } from "@clerk/nextjs";
-import { redirect } from "next/navigation";
 import Link from "next/link";
+import { requireAuthWithBilling } from "@/lib/auth-utils";
 import { getDecksWithCardCounts } from "@/db/queries";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,18 +8,13 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CreateDeckDialog } from "@/components/create-deck-dialog";
-import { Plus, BookOpen, Clock, Calendar, Crown } from "lucide-react";
+import { Plus, BookOpen, Calendar, Crown } from "lucide-react";
 
 export default async function DashboardPage() {
   // Verify authentication and get user ID with billing info
-  const { userId, has } = await auth();
-  
-  if (!userId) {
-    redirect("/");
-  }
+  const { userId, has } = await requireAuthWithBilling();
 
   // Check user's plan and features
-  const hasUnlimitedDecks = has({ feature: 'unlimited_decks' });
   const hasThreeDeckLimit = has({ feature: '3_deck_limit' });
 
   // Fetch user's decks with card counts

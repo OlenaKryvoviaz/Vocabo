@@ -1,8 +1,7 @@
 "use server";
 
-import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { requireAuthWithBilling, Validators } from "@/lib/auth-utils";
 import { createDeck, updateDeck, deleteDeck, getDecksByUserId } from "@/db/queries/decks";
 import { z } from "zod";
 
@@ -57,11 +56,7 @@ export async function createDeckAction(
   formData: FormData
 ): Promise<CreateDeckFormState> {
   // Verify authentication and get billing info
-  const { userId, has } = await auth();
-  
-  if (!userId) {
-    redirect("/");
-  }
+  const { userId, has } = await requireAuthWithBilling();
 
   // Check deck limits for free users
   const hasUnlimitedDecks = has({ feature: 'unlimited_decks' });
@@ -103,9 +98,12 @@ export async function createDeckAction(
   const { title, description } = validatedFields.data;
 
   try {
+    // Validate title using utility
+    const validatedTitle = Validators.deckTitle(title);
+    
     // Create the deck with proper ownership
     const newDeck = await createDeck({
-      title: title.trim(),
+      title: validatedTitle,
       description: description?.trim() || null,
       userId,
     });
@@ -133,11 +131,7 @@ export async function updateDeckAction(
   formData: FormData
 ): Promise<UpdateDeckFormState> {
   // Verify authentication
-  const { userId } = await auth();
-  
-  if (!userId) {
-    redirect("/");
-  }
+  const { userId } = await requireAuthWithBilling();
 
   // Validate form data
   const validatedFields = updateDeckSchema.safeParse({
@@ -155,9 +149,12 @@ export async function updateDeckAction(
   const { title, description, deckId } = validatedFields.data;
 
   try {
+    // Validate title using utility
+    const validatedTitle = Validators.deckTitle(title);
+    
     // Update the deck with ownership verification
     await updateDeck(deckId, userId, {
-      title: title.trim(),
+      title: validatedTitle,
       description: description?.trim() || null,
     });
 
@@ -195,11 +192,7 @@ export async function deleteDeckAction(
   formData: FormData
 ): Promise<DeleteDeckFormState> {
   // Verify authentication
-  const { userId } = await auth();
-  
-  if (!userId) {
-    redirect("/");
-  }
+  const { userId } = await requireAuthWithBilling();
 
   // Validate form data
   const validatedFields = deleteDeckSchema.safeParse({

@@ -1,7 +1,5 @@
-import { auth } from "@clerk/nextjs/server";
-import { redirect } from "next/navigation";
-import { notFound } from "next/navigation";
-import { getDeckIfOwner } from "@/db/queries/decks";
+import { notFound, redirect } from "next/navigation";
+import { requireAuth, getDeckIfOwner, Validators } from "@/lib/auth-utils";
 import { getCardsByDeckId } from "@/db/queries/cards";
 import { StudySession } from "./study-session";
 
@@ -13,16 +11,14 @@ interface StudyPageProps {
 
 export default async function StudyPage({ params }: StudyPageProps) {
   // Verify authentication and get user ID
-  const { userId } = await auth();
-  
-  if (!userId) {
-    redirect("/");
-  }
+  const userId = await requireAuth();
 
-  // Parse deck ID
+  // Parse and validate deck ID
   const resolvedParams = await params;
-  const deckId = parseInt(resolvedParams.deckId);
-  if (isNaN(deckId)) {
+  let deckId: number;
+  try {
+    deckId = Validators.deckId(resolvedParams.deckId);
+  } catch {
     notFound();
   }
 
