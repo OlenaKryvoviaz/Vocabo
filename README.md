@@ -5,7 +5,10 @@
 A freemium vocabulary learning app that combines AI-powered content generation with subscription monetization. Built to demonstrate modern product strategy, technical architecture, and user experience design.
 
 Check it here ->[https://vocabo-three.vercel.app/](https://vocabo-three.vercel.app/)
-Video demo ->[https://www.loom.com/share/8759b73f5ed64360a560b125c1fb7ee9](https://www.loom.com/share/8759b73f5ed64360a560b125c1fb7ee9)
+
+Video demo ->
+
+[https://www.loom.com/share/8759b73f5ed64360a560b125c1fb7ee9](https://www.loom.com/share/8759b73f5ed64360a560b125c1fb7ee9)
 
 ## 🎯 Product Overview
 
